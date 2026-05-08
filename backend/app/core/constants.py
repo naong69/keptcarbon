@@ -1,9 +1,15 @@
-# Biometric Constants [cite: 1444]
-CARBON_FRACTION = 0.47 
-CARBON_EQUIVALENT_FACTOR = 3.667  # CO2 to C conversion factor 44/12
+# Constants and configuration for the KeptCarbon Platform
 
-# Spacing to Density Mapping [cite: 1452, 1453, 1457]
-DEFAULT_DENSITIES = {
+# Tree Age Homologous Threshold
+TREE_AGE_HOMOLOGOUS_THRESHOLD = 0.8
+TREE_COUNT_VALIDATION_THRESHOLD = 0.05
+
+# Biometric Constants 
+CARBON_FRACTION = 0.47 
+CARBON_EQUIVALENT_FACTOR = 3.667  # C to CO2  Molecular weight ratio 44/12
+
+# Spacing to Density Mapping 
+TREE_DENSITIES = {
     "2.5x8": 500,  # Recommended standard for flat terrain
     "3x7": 475,    # Common for sloped areas
     "3x8": 419,

@@ -2,30 +2,19 @@ import geopandas as gpd
 import shapely.geometry
 from app.core.constants import DEFAULT_DENSITIES
 
+import pyproj
+from shapely.ops import transform
 
 class SpatialUtils:
-
-    @staticmethod
-    def calculate_area_ha(geometry: dict) -> float:
-        """
-        Calculates area in hectares from GeoJSON geometry.
-        Ensures geometry is in EPSG:32647.
-        """
-
-        geom = shapely.geometry.shape(geometry)
-
-        gdf = gpd.GeoDataFrame(
-            index=[0],
-            geometry=[geom],
-            crs="EPSG:32647"
-        )
-
-        # Ensure CRS
-        gdf = gdf.to_crs("EPSG:32647")
-
-        area_m2 = gdf.geometry.area.iloc[0]
-
-        return area_m2 / 10000.0
+    def calculate_area_ha(self, geometry_obj) -> float:
+        """Calculates metric area in hectares (EPSG:32647)."""
+        # geometry_obj can be a dict or a shapely shape
+        poly = shapely.geometry.shape(geometry_obj) if isinstance(geometry_obj, dict) else geometry_obj
+        
+        # Transform WGS84 to UTM 47N for metric accuracy
+        project = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32647", always_xy=True).transform
+        poly_transformed = transform(project, poly)
+        return poly_transformed.area / 10000.0
 
     def get_verified_tree_data(self, poly_data: dict) -> dict:
 

@@ -128,59 +128,179 @@ class CarbonService:
             }
 
         # Step 3: Determines the carbon stock profile.
-        
-        if poly_data["year_of_planting"] is None:
-            # If the user has not provided a year of planting, 
-            # extract age cohorts from the raster and generate the profile.
+
+        # Check year of planting again raster map using the A302 zone geometry. 
+        #This will also determine the reliability of the user-input year of planting, if it is provided.
+        planting_year_info = self.age_map_svc.get_plantation_year_check(poly_data) # This will perform the year check 
+
+        if planting_year_info["year"] is None: 
+            # Found heterogeneous age classes with significant deviation, 
+            # which means the user-input year of planting is not reliable, if it is provided
+            # then egnore the user-input year of planting and use the year from age map to form the cohort and generate profile.
 
             cohorts = self.age_map_svc.get_plantation_age_cohorts(poly_data)
-            profile = self.generate_carbon_profile(poly_data, cohorts)
 
-            reliable_mgs = "CARBON PROFILE GENERATED USING USER-DEFINED YEAR OF PLANTING AND CALCULATED TREE COUNT."
+            # find 0 in chorts.
+            cohorts_with_zero_age = [cohort for cohort in cohorts if cohort['age'] == 0]
+            if cohorts_with_zero_age:
+                # If there are cohorts with age 0, it means the age map cannot determine the year of planting for those pixels. 
+                # In this case, we will generate the carbon profile using the cohorts with determined age, 
+                # but we will flag the profile as potentially unreliable due to the undetermined planting year for some portion of the plantation.
+                reliable_mgs_add = " (NOTE: SOME PIXELS HAVE UNDETERMINED PLANTING YEAR)"
 
-            return {
-                "polygon_id": poly_data["id"],
-                "status": {"status": "success", 
-                            "status_code": "S03", 
-                            "message": reliable_mgs
-                            },
-                "carbon_profile": profile
-             }
-
-        else:
-            # If year of planting is provided, assume only one tree's age  in the plantation and 
-            # proceed to tree count reliability check for the user-input tree count by comparing it against
-            # a calculated tree count derived from the area of the A302 zone and the specified spacing system.
-            tree_info = self.tree_svc.get_tree_count_user_input(poly_data)
-            reliable_tree_count = tree_info['tree_count']  
-
-            current_year = datetime.now().year
-            age = current_year - poly_data["year_of_planting"]
-
-            # Form cohorts (Age + Tree Count pairs) 
-            # Example: [{'age': 10, 'tree_count': 200}, {'age': 15, 'tree_count': 300}]
-            cohorts = [{'age': age, 'tree_count': reliable_tree_count}]
-
-            profile = self.generate_carbon_profile(poly_data, cohorts)
-
-            if tree_info['is_reliable']:
-                reliable_mgs = (
-                    "CARBON PROFILE GENERATED USING USER-DEFINED YEAR "
-                    "OF PLANTING AND RELIABLE TREE COUNT."
-                )
+                # Use only cohorts with determined age for profile generation
+                cohorts = [c for c in cohorts if c['age'] > 0] 
             else:
-                reliable_mgs = (
-                    "CARBON PROFILE GENERATED USING USER-DEFINED YEAR "
-                    "OF PLANTING AND CALCULATED TREE COUNT."
+                # If there are no cohorts with age 0, it means all pixels have a determined planting year, 
+                # and we can proceed with profile generation as usual.
+                reliable_mgs_add = ""
+
+            
+            profile = self.generate_carbon_profile(poly_data, cohorts)
+
+            reliable_mgs = (
+                    "CARBON PROFILE GENERATED USING CALCULATED YEAR "
+                    "OF PLANTING AND RELIABLE TREE COUNT." + reliable_mgs_add
                 )
 
             return {
                 "polygon_id": poly_data["id"],
                 "status": {"status": "success", 
-                            "status_code": "S03", 
+                            "status_code": "S04", 
                             "message": reliable_mgs
                             },
                 "carbon_profile": profile
             }
 
+
+        elif planting_year_info["year"] == 0: 
+            # >80% of year pixels are 0, which means the age map cannot determine the year.
+            # Assume the user-input year of planting is reliable, if it is provided, otherwise, return None with message.
+            if poly_data["year_of_planting"] is None:
+                # If the user has not provided a year of planting and the age map cannot determine the year, 
+                # we will not be able to generate a reliable carbon profile. 
+                # In this case, we will return a response indicating that the carbon profile cannot be generated due to 
+                # unreliable planting year information, and the carbon_profile field will be set to None.
+
+                reliable_mgs = "CARBON PROFILE CANNOT BE GENERATED DUE TO UNRELIABLE EXTRACTED YEAR OF PLANTING. (USER-INPUT YEAR OF PLANTING IS REQUIRED.)"
+
+                return {
+                    "polygon_id": poly_data["id"],
+                    "status": {"status": "error", 
+                                "status_code": "E04", 
+                                "message": reliable_mgs
+                                },
+                    "carbon_profile": None
+                }
+            else:
+                # If year of planting is provided, consider it as reliable and proceed to tree count reliability check and profile generation.
+                
+                current_year = datetime.now().year
+                age = current_year - poly_data["year_of_planting"]
+
+                tree_info = self.tree_svc.get_tree_count_user_input(poly_data)
+                reliable_tree_count = tree_info['tree_count']  
+
+                # Form cohorts (Age + Tree Count pairs) 
+                cohorts = [{'age': age, 'tree_count': reliable_tree_count}]
+
+                profile = self.generate_carbon_profile(poly_data, cohorts)
+
+                if tree_info['is_reliable']:
+                    reliable_mgs = (
+                        "CARBON PROFILE GENERATED USING USER-DEFINED YEAR "
+                        "OF PLANTING AND RELIABLE TREE COUNT."
+                    )
+                else:
+                    reliable_mgs = (
+                        "CARBON PROFILE GENERATED USING USER-DEFINED YEAR "
+                        "OF PLANTING AND CALCULATED TREE COUNT."
+                    )
+
+                return {
+                    "polygon_id": poly_data["id"],
+                    "status": {"status": "success", 
+                                "status_code": "S03", 
+                                "message": reliable_mgs
+                                },
+                    "carbon_profile": profile
+                }
+
+
+         else: 
+            # Found majority year class with year homogeneity. check reliability of the user-input year of planting, if it is provided.
+            # otherwise, use the year from age map to form the cohort and generate profile.
+            if poly_data["year_of_planting"] is None:
+                # If the user has not provided a year of planting, 
+                # extract age cohorts from the raster and generate the profile.
+
+                current_year = datetime.now().year
+                age = current_year - planting_year_info["year"]
+
+                tree_info = self.tree_svc.get_tree_count_user_input(poly_data)
+                reliable_tree_count = tree_info['tree_count']  
+                
+                # Form cohorts (Age + Tree Count pairs) 
+                cohorts = [{'age': age, 'tree_count': reliable_tree_count}]
+
+                profile = self.generate_carbon_profile(poly_data, cohorts)
+
+                if tree_info['is_reliable']:
+                    reliable_mgs = (
+                        "CARBON PROFILE GENERATED USING CALCULATED YEAR "
+                        "OF PLANTING AND RELIABLE TREE COUNT."
+                    )
+                else:
+                    reliable_mgs = (
+                        "CARBON PROFILE GENERATED USING CALCULATED YEAR "
+                        "OF PLANTING AND CALCULATED TREE COUNT."
+                    )
+
+                return {
+                    "polygon_id": poly_data["id"],
+                    "status": {"status": "success", 
+                                "status_code": "S03", 
+                                "message": reliable_mgs
+                                },
+                    "carbon_profile": profile
+                }
+
+            else :
+                # If the user-input year of planting is provided, assume it is reliable and use it to form the cohort and generate profile.
+                
+                current_year = datetime.now().year
+                age = current_year - poly_data["year_of_planting"]
+
+                tree_info = self.tree_svc.get_tree_count_user_input(poly_data)
+                reliable_tree_count = tree_info['tree_count']  
+                
+                # Form cohorts (Age + Tree Count pairs) 
+                cohorts = [{'age': age, 'tree_count': reliable_tree_count}]
+
+                profile = self.generate_carbon_profile(poly_data, cohorts)
+
+                if tree_info['is_reliable']:
+                    reliable_mgs = (
+                        "CARBON PROFILE GENERATED USING USER-DEFINED YEAR "
+                        "OF PLANTING AND RELIABLE TREE COUNT."
+                    )
+                else:
+                    reliable_mgs = (
+                        "CARBON PROFILE GENERATED USING USER-DEFINED YEAR "
+                        "OF PLANTING AND CALCULATED TREE COUNT."
+                    )
+
+                return {
+                    "polygon_id": poly_data["id"],
+                    "status": {"status": "success", 
+                                "status_code": "S03", 
+                                "message": reliable_mgs
+                                },
+                    "carbon_profile": profile
+                }
+
+
         
+
+
+

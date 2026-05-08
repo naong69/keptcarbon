@@ -10,7 +10,7 @@ from pathlib import Path
 
 class ProvinceService:
     def __init__(self):
-        self.file_path = Path("app/data/shp/th_province.gpkg")
+        self.file_path = Path("app/data/shp/TH_PROVINCE.gpkg")
         self.target_crs = "EPSG:32647"
 
     def get_province(self, poly_data: dict):
@@ -26,17 +26,14 @@ class ProvinceService:
             # GeoJSON geometry dict -> Shapely geometry
             plantation_geom = shape(poly_data["geometry"])
 
-            properties = {
-                k: v for k, v in poly_data.items()
-                if k != "geometry"
-            }
-
+            # Create plantation GeoDataFrame
             plantation_gdf = gpd.GeoDataFrame(
-                [properties],
+                index=[0],
                 crs="EPSG:4326",
                 geometry=[plantation_geom]
             )
 
+            # Convert CRS
             plantation_gdf = plantation_gdf.to_crs(self.target_crs)
 
             intersections = gpd.overlay(

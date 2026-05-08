@@ -18,10 +18,6 @@ class LanduseService:
 
         p_code = poly_data.get("province_code")
 
-        if p_code is None:
-            poly_data["a302_geometry"] = None
-            return poly_data
-
         config = REGION_CONFIG.get(p_code)
 
         if config is None:
@@ -41,7 +37,7 @@ class LanduseService:
         if not self.file_path.exists():
             raise HTTPException(
                 status_code=500,
-                detail="Landuse vector file not found."
+                detail="LANDUSE VECTOR FILE NOT FOUND."
             )
 
         try:

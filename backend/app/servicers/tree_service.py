@@ -3,7 +3,11 @@ Tree count reliability check.
 """
 
 from app.services.spatial_utils import SpatialUtils
-from app.core.constants import DEFAULT_DENSITIES
+from app.core.constants import (
+    TREE_DENSITIES, 
+    TREE_COUNT_VALIDATION_THRESHOLD,
+    TREE_AGE_HOMOLOGOUS_THRESHOLD
+)
 
 class TreeService:
     def __init__(self):
@@ -11,13 +15,12 @@ class TreeService:
 
     def get_tree_count_user_input(self, poly_data: dict) -> dict:
 
-
         area_ha = self.spatial_utils.calculate_area_ha(
             poly_data["a302_geometry"]
         )
 
         spacing = poly_data.get("spacing_system") or "2.5x8"
-        density = DEFAULT_DENSITIES.get(spacing, 500)
+        density = TREE_DENSITIES.get(spacing, 500)
 
         calculated_count = int(area_ha * density)
 
@@ -39,7 +42,7 @@ class TreeService:
 
         diff_percent = abs(user_tree_count - calculated_count) / calculated_count
 
-        if diff_percent <= 0.05:
+        if diff_percent <= TREE_COUNT_VALIDATION_THRESHOLD:
             return {
                 "tree_count": user_tree_count,
                 "is_reliable": True,
@@ -50,7 +53,7 @@ class TreeService:
             "tree_count": calculated_count,
             "is_reliable": False,
             "note": (
-                f"USER INPUT ({user_tree_count}) DEVIATED >5% "
+                f"USER INPUT ({user_tree_count}) DEVIATED >{TREE_COUNT_VALIDATION_THRESHOLD*100}% "
                 f"FROM CALCULATED ({calculated_count}). USED CALCULATED VALUE."
             )
         }
@@ -61,14 +64,21 @@ class TreeService:
             poly_data["a302_geometry"]
         )
         
-        if not (max_count / total_pixels) > 0.8:
+        if (num_pixel / total_pixels) > TREE_AGE_HOMOLOGOUS_THRESHOLD:
+            # If the age map data is dominated by one age class, we will use the calculated tree count based on area 
+            # and spacing without adjustment, as the age homogeneity suggests that the plantation is likely to have 
+            # use user-input spacing to estimate tree density across the area or use default spacing if no user-input is provided.
+            spacing = poly_data.get("spacing_system") or "2.5x8"
+            density = TREE_DENSITIES.get(spacing, 500)
+
+            calculated_count = int(area_ha * density)
+
+        else: # if found age heterogeneity, we will use the pixel ratio to adjust the calculated tree count, 
+              # which is derived from area and use default spacing, to get a more accurate estimation of tree count for the specific polygon.
             area_ha = area_ha * (num_pixel / total_pixels)
-
-        spacing = poly_data.get("spacing_system") or "2.5x8"
-        density = DEFAULT_DENSITIES.get(spacing, 500)
-
-        calculated_count = int(area_ha * density)
-
+            density = 500
+            calculated_count = int(area_ha * density)
+        
         return {
             "tree_count": calculated_count,
             "is_reliable": False,
