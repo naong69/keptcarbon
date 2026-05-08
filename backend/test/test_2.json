@@ -1,0 +1,74 @@
+[
+    {
+        "id": "TC_000_NOT_IN_THAILAND",
+        "comment": "Case: Polygon is not in Thailand.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.271, 12.600],[101.317, 12.599],[101.316, 12.570],[101.273, 12.570],[101.271, 12.600]]]]
+        }, 
+        "year_of_planting": 2010,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": 500
+    },
+    {
+        "id": "TC_001_PERFECT_INPUT",
+        "comment": "Case: All user inputs provided and reliable. Tests standard flow.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
+        }, 
+        "year_of_planting": 2010,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": 500
+    },
+    {
+        "id": "TC_002_NULL_YEAR_HOMOGENEOUS",
+        "comment": "Case: Raster extraction for age. Tests AgeMapService 80% dominance logic.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.489, 12.987],[101.490, 12.986],[101.492, 12.992],[101.491, 12.992],[101.490, 12.991],[101.490, 12.990],[101.490, 12.989],[101.489, 12.988],[101.489, 12.987]]]]
+        }, 
+        "year_of_planting": null,
+        "spacing_system": "3x7",
+        "rubber_clone": "RRIT 251",
+        "tree_count": null
+    },
+    {
+        "id": "TC_005_TREE_COUNT_UNRELIABLE",
+        "comment": "Case: User input tree_count deviates >5%.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.491, 12.810],[101.499, 12.813],[101.498, 12.814],[101.491, 12.812],[101.491, 12.810]]]]
+        }, 
+        "year_of_planting": 2012,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": 10000
+    },
+    {
+        "id": "TC_008-1_RASTER_NA_FALLBACK",
+        "comment": "Case: Fraction of year pixels are 0/NA.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.419, 12.809],[101.421, 12.811],[101.427, 12.813],[101.429, 12.811],[101.422, 12.809],[101.419, 12.809]]]]
+        }, 
+        "year_of_planting": null,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    },
+    {
+        "id": "TC_009_OUTSIDE_SUPPORTED_PROVINCE",
+        "comment": "Case: Drawing outside RYG/SRT. Tests ProvinceService E01 error handling.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[100.994, 12.823],[100.995, 12.823],[100.996, 12.823],[100.995, 12.821],[100.994, 12.822],[100.994, 12.823]]]]
+        }, 
+        "year_of_planting": 2020,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    }
+]

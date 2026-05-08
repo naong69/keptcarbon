@@ -74,7 +74,7 @@ class AgeMapService:
 
             return counts
 
-         except Exception as e:
+        except Exception as e:
             raise HTTPException(
                 status_code=500,
                 detail=f"Raster extraction failed: {str(e)}"
@@ -131,3 +131,10 @@ class AgeMapService:
                 "AGE MAP DATA SHOWS HIGH VARIABILITY; "
                 "CANNOT RELIABLY DETERMINE AGE. "
                 "CONSIDER USING USER-INPUT AGE OR OTHER METHODS."
+            )
+        }
+
+
+
+
+        

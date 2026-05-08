@@ -227,7 +227,7 @@ class CarbonService:
                 }
 
 
-         else: 
+        else: 
             # Found majority year class with year homogeneity. check reliability of the user-input year of planting, if it is provided.
             # otherwise, use the year from age map to form the cohort and generate profile.
             if poly_data["year_of_planting"] is None:

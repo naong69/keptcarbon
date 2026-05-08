@@ -1,6 +1,6 @@
 import geopandas as gpd
 import shapely.geometry
-from app.core.constants import DEFAULT_DENSITIES
+from app.core.constants import TREE_DENSITIES
 
 import pyproj
 from shapely.ops import transform
@@ -24,7 +24,7 @@ class SpatialUtils:
 
         spacing = poly_data.get("spacing_system") or "2.5x8"
 
-        density = DEFAULT_DENSITIES.get(spacing, 500)
+        density = TREE_DENSITIES.get(spacing, 500)
 
         calculated_count = int(area_ha * density)
 
