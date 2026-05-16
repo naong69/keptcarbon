@@ -19,6 +19,7 @@ services:
       - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
       - LINE_CALLBACK_URL=${LINE_CALLBACK_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - NEXT_PUBLIC_BACKEND_API_URL=${NEXT_PUBLIC_BACKEND_API_URL}
     depends_on:
       postgis:
         condition: service_healthy
