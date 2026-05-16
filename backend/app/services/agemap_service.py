@@ -1,5 +1,6 @@
 import rasterio
 import geopandas as gpd
+import numpy as np
 from rasterio.mask import mask
 from shapely.geometry import shape
 from collections import Counter
@@ -19,18 +20,18 @@ class AgeMapService:
         for p_code, cfg in REGION_CONFIG.items():
             raster_path = self.base_path / cfg["plaining_year_map"]
             if raster_path.exists():
-                # Keep the connection open for fast windowed reading
                 self._raster_handles[p_code] = rasterio.open(raster_path)
             else:
                 print(f"Warning: Age raster file not found for P_CODE: {p_code}")
 
-    def get_plantation_age_count(self, poly_data: dict) -> list:
+    def get_plantation_age_count(self, poly_data: dict) -> Counter:
+        """
+        Extracted counts. To avoid duplicate masking operations, 
+        prefer consuming pre-computed stats downstream.
+        """
         p_code = poly_data.get("province_code")
-        
-        # 1. Retrieve the pre-opened handle
         src = self._raster_handles.get(p_code)
 
-        # 2. Check if the handle exists in our registry (not the file system)
         if src is None:
             raise HTTPException(
                 status_code=400,
@@ -38,40 +39,30 @@ class AgeMapService:
             )
 
         try:
-            # GeoJSON geometry dict -> Shapely geometry
-            plantation_geom = shape(poly_data["a302_geometry"])
+            plantation_geom = shape(poly_data["merged_geometry"])
 
-            # Create plantation GeoDataFrame
-            plantation_gdf = gpd.GeoDataFrame(
-                index=[0],
-                crs=self.target_crs,
-                geometry=[plantation_geom]
-            )
+            # OPTIMIZATION: Check bounding box scale. If polygon is microscopic, bypass heavy masks
+            if plantation_geom.area == 0:
+                return Counter()
 
-            # Ensure geometry is in raster CRS
-            plantation_gdf = plantation_gdf.to_crs(self.target_crs)  
-
-            out_image, out_transform = mask(
+            # Pass raw shapely array directly to rasterio mask to avoid GeoDataFrame construction overhead
+            out_image, _ = mask(
                 src,
-                [plantation_gdf.geometry[0]],
+                [plantation_geom],
                 crop=True,
                 filled=True,
                 nodata=-9999
             )
 
+            # Fast numpy filtering 
             data = out_image[0]
-
-            valid_pixels = data[
-                (data != -9999) &
-                (data != src.nodata) #&
-                #(data >= 1988) &
-                #(data <= datetime.now().year + 1)
-            ]
-            print(f"Valid age pixels count: {len(valid_pixels)} out of {data.size} total pixels")
+            nodata_val = src.nodata if src.nodata is not None else -9999
             
-            counts = Counter(valid_pixels.flatten())
+            # Extract 1D array of valid pixels in one pass
+            valid_pixels = data[(data != -9999) & (data != nodata_val)]
             
-            return counts
+            # High-speed counting via collections.Counter on flattened array
+            return Counter(valid_pixels)
 
         except Exception as e:
             raise HTTPException(
@@ -79,49 +70,67 @@ class AgeMapService:
                 detail=f"Raster extraction failed: {str(e)}"
             )
 
-
     def get_plantation_age_cohorts(self, poly_data: dict) -> list:
+        """
+        Generates spatiotemporal age cohorts. Uses contextual caching 
+        or extracts data if not cached.
+        """
+        # OPTIMIZATION: Check if another step already computed the counts to save I/O time
+        counts = poly_data.get("_cached_age_counts")
+        if counts is None:
+            counts = self.get_plantation_age_count(poly_data)
+            poly_data["_cached_age_counts"] = counts
 
-        counts = self.get_plantation_age_count(poly_data)
         total_pixels = sum(counts.values())
+        if total_pixels == 0:
+            return []
 
         current_year = datetime.now().year
         most_common_year, max_count = counts.most_common(1)[0]
 
-        # homologous age class (dominated by one age class) - use the most common age and calculate tree count based on the pixel count of that age class
+        # Homologous optimization branch
         if (max_count / total_pixels) > TREE_AGE_HOMOLOGOUS_THRESHOLD:
             tree_info = self.tree_svc.get_tree_count_raster_pixel(poly_data, int(max_count), total_pixels)
-            reliable_tree_count = tree_info['tree_count']
-
             return [{
                 "age": int(current_year - most_common_year),
-                "tree_count": reliable_tree_count
+                "pixel_count": int(max_count),
+                "proportion": round(max_count / total_pixels, 4),
+                "tree_count": tree_info['tree_count']
             }]
 
-        result = []
-        for yr, count in counts.most_common():
+        # Pre-allocate list sizing for faster processing loops
+        most_common_list = counts.most_common()
+        result = [None] * len(most_common_list)
+        
+        for idx, (yr, count) in enumerate(most_common_list):
             tree_info = self.tree_svc.get_tree_count_raster_pixel(poly_data, int(count), total_pixels)
-            reliable_tree_count = tree_info['tree_count']
-            result.append({
+            result[idx] = {
                 "age": int(current_year - yr),
-                "tree_count": reliable_tree_count
-            })
+                "pixel_count": int(count),
+                "proportion": round(count / total_pixels, 4),
+                "tree_count": tree_info['tree_count']
+            }
 
         return result
 
-    def get_plantation_year_check(self, poly_data: dict) -> list:
-
+    def get_plantation_year_check(self, poly_data: dict) -> dict:
+        """
+        Validates age map homogeneity and caches the underlying 
+        counts structure for subsequent cohort extraction.
+        """
+        # Read and cache counts immediately so 'get_plantation_age_cohorts' can reuse it
         counts = self.get_plantation_age_count(poly_data)
-        print(f"Age counts for polygon {poly_data['id']}: {counts}")
+        poly_data["_cached_age_counts"] = counts
 
         total_pixels = sum(counts.values())
-        current_year = datetime.now().year
+        if total_pixels == 0:
+            return {"year": None, "is_reliable": False, "note": "EMPTY RANGE OR OUT OF BOUNDS RASTER COVERAGE."}
+
         most_common_year, max_count = counts.most_common(1)[0]
-        print(f"Most common planting year: {most_common_year} with count: {max_count} out of {total_pixels} pixels")
 
         if (max_count / total_pixels) > TREE_AGE_HOMOLOGOUS_THRESHOLD:
             return {
-                "year": most_common_year,
+                "year": int(most_common_year),
                 "is_reliable": True,
                 "note": "AGE MAP DATA IS DOMINATED BY ONE AGE CLASS; USED MOST COMMON AGE."
              }
@@ -129,13 +138,5 @@ class AgeMapService:
         return {
             "year": None,
             "is_reliable": False,
-            "note": (
-                "AGE MAP DATA SHOWS HIGH VARIABILITY; "
-                "CANNOT RELIABLY DETERMINE AGE. "
-                "CONSIDER USING USER-INPUT AGE OR OTHER METHODS."
-            )
+            "note": "AGE MAP DATA SHOWS HIGH VARIABILITY; CANNOT RELIABLY DETERMINE AGE."
         }
-
-
-
-

@@ -1,0 +1,152 @@
+[
+    {
+        "id": "TC_000_NOT_IN_THAILAND",
+        "comment": "Case: Polygon is not in Thailand. ProvinceService E01 error handling.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.271, 12.600],[101.317, 12.599],[101.316, 12.570],[101.273, 12.570],[101.271, 12.600]]]]
+        }, 
+        "year_of_planting": 2010,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": 500
+    },
+    {
+        "id": "TC_002_OUTSIDE_SUPPORTED_PROVINCE",
+        "comment": "Case: Drawing outside RYG. Tests ProvinceService E02 error handling.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[100.994, 12.823],[100.995, 12.823],[100.996, 12.823],[100.995, 12.821],[100.994, 12.822],[100.994, 12.823]]]]
+        }, 
+        "year_of_planting": 2020,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    },
+    {
+        "id": "TC_003_PERFECT_INPUT",
+        "comment": "Case: All user inputs provided and reliable. Tests standard flow.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
+        }, 
+        "year_of_planting": 2010,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": 33300
+    },
+    {
+        "id": "TC_004_YEAR_NULL_HETEROGENEOUS",
+        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year is null, so raster age will be used.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
+        }, 
+        "year_of_planting": null,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": 33300
+    },
+    {
+        "id": "TC_005_YEAR_NULL_HETEROGENEOUS_TREE_COUNT_NULL",
+        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year and tree_count are null, so raster age and density will be used.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
+        }, 
+        "year_of_planting": null,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    },
+    {
+        "id": "TC_006_TREE_COUNT_AND_DENSITY_NULL",
+        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year and tree_count are null, so raster age and default density will be used.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
+        }, 
+        "year_of_planting": 2015,
+        "spacing_system": null,
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    },
+    {
+        "id": "TC_007_TREE_COUNT_NULL_3x7",
+        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year and tree_count are null, so raster age and default density will be used.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
+        }, 
+        "year_of_planting": 2015,
+        "spacing_system": "3x7",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    },
+    {
+        "id": "TC_008-1_RASTER_NA_FALLBACK",
+        "comment": "Case: Fraction of year pixels are 0/NA. Excludes undetermined pixels from age calculation. Tests AgeMapService fallback logic.",
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [[[[101.419, 12.809],[101.421, 12.811],[101.427, 12.813],[101.429, 12.811],[101.422, 12.809],[101.419, 12.809]]]]
+        }, 
+        "year_of_planting": null,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    },
+    {
+        "id": "TC_008-2_RASTER_NA_FALLBACK",
+        "comment": "Case: 100% 0/NA year pixels. Tests AgeMapService fallback logic when polygon is homogeneous in 0/NA age but user input year is null, so cannot generate a reliable carbon profile.",
+        "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+                [
+                [
+                    [101.431, 12.953],
+                    [101.430, 12.954],
+                    [101.431, 12.955],
+                    [101.432, 12.955],
+                    [101.432, 12.955],
+                    [101.433, 12.955],
+                    [101.433, 12.954],
+                    [101.433, 12.954],
+                    [101.433, 12.954],
+                    [101.432, 12.954],
+                    [101.431, 12.954],
+                    [101.431, 12.953],
+                    [101.431, 12.953]
+                ]
+                ]
+            ]
+            }, 
+        "year_of_planting": null,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    },
+    {
+        "id": "TC_008-3_RASTER_NA_FALLBACK",
+        "comment": "Case: >80% 0/NA year pixels. Tests AgeMapService fallback logic when polygon is homogeneous in 0/NA age, use user input year to generate a carbon profile.",
+        "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+                [
+                [
+                    [101.436, 12.951],
+                    [101.435, 12.952],
+                    [101.435, 12.953],
+                    [101.435, 12.954],
+                    [101.436, 12.954],
+                    [101.437, 12.952],
+                    [101.436, 12.951]
+                ]
+                ]
+            ]
+            }, 
+        "year_of_planting": 1992,
+        "spacing_system": "2.5x8",
+        "rubber_clone": "RRIM 600",
+        "tree_count": null
+    }
+]

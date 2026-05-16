@@ -1,152 +1,352 @@
 [
     {
-        "id": "TC_000_NOT_IN_THAILAND",
-        "comment": "Case: Polygon is not in Thailand. ProvinceService E01 error handling.",
-        "geometry": {
-          "type": "MultiPolygon",
-          "coordinates": [[[[101.271, 12.600],[101.317, 12.599],[101.316, 12.570],[101.273, 12.570],[101.271, 12.600]]]]
-        }, 
-        "year_of_planting": 2010,
-        "spacing_system": "2.5x8",
-        "rubber_clone": "RRIM 600",
-        "tree_count": 500
-    },
-    {
-        "id": "TC_002_OUTSIDE_SUPPORTED_PROVINCE",
-        "comment": "Case: Drawing outside RYG. Tests ProvinceService E02 error handling.",
-        "geometry": {
-          "type": "MultiPolygon",
-          "coordinates": [[[[100.994, 12.823],[100.995, 12.823],[100.996, 12.823],[100.995, 12.821],[100.994, 12.822],[100.994, 12.823]]]]
-        }, 
-        "year_of_planting": 2020,
-        "spacing_system": "2.5x8",
-        "rubber_clone": "RRIM 600",
-        "tree_count": null
-    },
-    {
         "id": "TC_003_PERFECT_INPUT",
+        "province_code": "RAY",
         "comment": "Case: All user inputs provided and reliable. Tests standard flow.",
+        "project_type": "existing",
         "geometry": {
           "type": "MultiPolygon",
           "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
         }, 
+        "lu_polygon": [
+            {
+                "lu_class": "A204",
+                "lu_class_desc_th": "มันสำปะหลัง",
+                "lu_class_desc_en": "Cassava",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [
+                                755458.4086999996,
+                                1416874.7081000004
+                            ],
+                            [
+                                755439.3586999997,
+                                1416879.8674999997
+                            ],
+                            [
+                                755426.6586999996,
+                                1416857.6425
+                            ],
+                            [
+                                755390.5429999996,
+                                1416866.3737000003
+                            ],
+                            [
+                                755359.5866999999,
+                                1416877.4861999992
+                            ],
+                            [
+                                755363.9523,
+                                1416904.0768999998
+                            ],
+                            [
+                                755411.5773999998,
+                                1416892.5675000008
+                            ],
+                            [
+                                755421.8962000003,
+                                1416924.7145000007
+                            ],
+                            [
+                                755394.5116999997,
+                                1416934.6363999993
+                            ],
+                            [
+                                755402.4390000002,
+                                1416958.4180999994
+                            ],
+                            [
+                                755480.7478,
+                                1416938.2542000003
+                            ],
+                            [
+                                755469.1244000001,
+                                1416904.4737999998
+                            ],
+                            [
+                                755458.4086999996,
+                                1416874.7081000004
+                            ]
+                        ]
+                    ]
+                },
+                "area_m2": 6244.0951,
+                "area_percent": 1.89
+            },
+            {
+                "lu_class": "A302",
+                "lu_class_desc_th": "ยางพารา",
+                "lu_class_desc_en": "Para rubber",
+                "geometry": {
+                    "type": "MultiPolygon",
+                    "coordinates": [
+                        [
+                            [
+                                [
+                                    755950.0418999996,
+                                    1416805.3441000003
+                                ],
+                                [
+                                    755937.4134,
+                                    1416802.9257999994
+                                ],
+                                [
+                                    755902.0199999996,
+                                    1416734.7003000006
+                                ],
+                                [
+                                    755904.4012000002,
+                                    1416731.9221
+                                ],
+                                [
+                                    755946.2564015234,
+                                    1416728.970883924
+                                ],
+                                [
+                                    755931.4526366361,
+                                    1416692.4549305355
+                                ],
+                                [
+                                    755435.8092242724,
+                                    1416730.817423752
+                                ],
+                                [
+                                    755393.2887742292,
+                                    1416754.5702268798
+                                ],
+                                [
+                                    755413.9587000003,
+                                    1416785.4111000001
+                                ],
+                                [
+                                    755429.3364000004,
+                                    1416801.3713000007
+                                ],
+                                [
+                                    755466.3463000003,
+                                    1416839.7829999998
+                                ],
+                                [
+                                    755506.0338000003,
+                                    1416890.5831000004
+                                ],
+                                [
+                                    755528.6409,
+                                    1416925.9222
+                                ],
+                                [
+                                    755563.5245000003,
+                                    1417003.8962999992
+                                ],
+                                [
+                                    755668.6358000003,
+                                    1416940.4507
+                                ],
+                                [
+                                    755675.8080016455,
+                                    1416936.5554586481
+                                ],
+                                [
+                                    755665.984183574,
+                                    1416895.0088947213
+                                ],
+                                [
+                                    755953.2979005203,
+                                    1416812.9192613082
+                                ],
+                                [
+                                    755950.0418999996,
+                                    1416805.3441000003
+                                ]
+                            ]
+                        ],
+                        [
+                            [
+                                [
+                                    755110.3487,
+                                    1416975.5145999994
+                                ],
+                                [
+                                    755157.7028000001,
+                                    1416957.9353999998
+                                ],
+                                [
+                                    755155.5546000004,
+                                    1416952.5112999994
+                                ],
+                                [
+                                    755141.2723000003,
+                                    1416920.7216999996
+                                ],
+                                [
+                                    755138.5776000004,
+                                    1416914.6686000004
+                                ],
+                                [
+                                    755092.4557999996,
+                                    1416932.822899999
+                                ],
+                                [
+                                    755110.3487,
+                                    1416975.5145999994
+                                ]
+                            ]
+                        ],
+                        [
+                            [
+                                [
+                                    755019.2244999995,
+                                    1417013.6596000008
+                                ],
+                                [
+                                    755011.5673123637,
+                                    1417016.9412679477
+                                ],
+                                [
+                                    755030.6656177385,
+                                    1417087.9477879298
+                                ],
+                                [
+                                    755045.3812999995,
+                                    1417080.5899999999
+                                ],
+                                [
+                                    755019.2244999995,
+                                    1417013.6596000008
+                                ]
+                            ]
+                        ],
+                        [
+                            [
+                                [
+                                    755677.2242,
+                                    1417153.3311
+                                ],
+                                [
+                                    755639.5239000004,
+                                    1417147.7869000006
+                                ],
+                                [
+                                    755600.8145000003,
+                                    1417089.1698000003
+                                ],
+                                [
+                                    755599.3103999998,
+                                    1417085.7595000006
+                                ],
+                                [
+                                    755558.8183000004,
+                                    1417102.514799999
+                                ],
+                                [
+                                    755552.5987999998,
+                                    1417075.6592999995
+                                ],
+                                [
+                                    755534.9973999998,
+                                    1417031.8704000004
+                                ],
+                                [
+                                    755522.3058000002,
+                                    1417034.2522
+                                ],
+                                [
+                                    755515.1619999995,
+                                    1417012.8209000006
+                                ],
+                                [
+                                    755525.7527999999,
+                                    1417008.8717999998
+                                ],
+                                [
+                                    755511.7198000001,
+                                    1416973.9603000004
+                                ],
+                                [
+                                    755387.8306999998,
+                                    1417003.8112000003
+                                ],
+                                [
+                                    755398.0817999998,
+                                    1417061.9009000007
+                                ],
+                                [
+                                    755398.3446000004,
+                                    1417063.667199999
+                                ],
+                                [
+                                    755403.6398999998,
+                                    1417099.3398000002
+                                ],
+                                [
+                                    755319.0815000003,
+                                    1417107.4816999994
+                                ],
+                                [
+                                    755309.0273000002,
+                                    1417109.0691999998
+                                ],
+                                [
+                                    755311.2982999999,
+                                    1417141.2761000004
+                                ],
+                                [
+                                    755355.7483999999,
+                                    1417142.3344
+                                ],
+                                [
+                                    755356.9694999997,
+                                    1417155.7660000008
+                                ],
+                                [
+                                    755361.0400999999,
+                                    1417200.5428999998
+                                ],
+                                [
+                                    755344.1067000004,
+                                    1417204.7762000002
+                                ],
+                                [
+                                    755279.5482999999,
+                                    1417200.5428999998
+                                ],
+                                [
+                                    755220.4463,
+                                    1417199.1522000004
+                                ],
+                                [
+                                    755221.898,
+                                    1417215.1206
+                                ],
+                                [
+                                    755224.2640825862,
+                                    1417241.1478294262
+                                ],
+                                [
+                                    755739.6401705518,
+                                    1417206.5123396434
+                                ],
+                                [
+                                    755728.8608304126,
+                                    1417160.9247136386
+                                ],
+                                [
+                                    755677.2242,
+                                    1417153.3311
+                                ]
+                            ]
+                        ]
+                    ]
+                },
+                "area_m2": 154569.9977,
+                "area_percent": 46.8
+            }
+        ],
         "year_of_planting": 2010,
         "spacing_system": "2.5x8",
         "rubber_clone": "RRIM 600",
         "tree_count": 33300
-    },
-    {
-        "id": "TC_004_YEAR_NULL_HETEROGENEOUS",
-        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year is null, so raster age will be used.",
-        "geometry": {
-          "type": "MultiPolygon",
-          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
-        }, 
-        "year_of_planting": null,
-        "spacing_system": "2.5x8",
-        "rubber_clone": "RRIM 600",
-        "tree_count": 33300
-    },
-    {
-        "id": "TC_005_YEAR_NULL_HETEROGENEOUS_TREE_COUNT_NULL",
-        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year and tree_count are null, so raster age and density will be used.",
-        "geometry": {
-          "type": "MultiPolygon",
-          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
-        }, 
-        "year_of_planting": null,
-        "spacing_system": "2.5x8",
-        "rubber_clone": "RRIM 600",
-        "tree_count": null
-    },
-    {
-        "id": "TC_006_TREE_COUNT_AND_DENSITY_NULL",
-        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year and tree_count are null, so raster age and default density will be used.",
-        "geometry": {
-          "type": "MultiPolygon",
-          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
-        }, 
-        "year_of_planting": 2015,
-        "spacing_system": null,
-        "rubber_clone": "RRIM 600",
-        "tree_count": null
-    },
-    {
-        "id": "TC_007_TREE_COUNT_NULL_3x7",
-        "comment": "Case: Tests AgeMapService 80% dominance logic. Polygon is homogeneous in age. User input year and tree_count are null, so raster age and default density will be used.",
-        "geometry": {
-          "type": "MultiPolygon",
-          "coordinates": [[[[101.438, 12.807],[101.445, 12.809],[101.447, 12.802],[101.439, 12.800],[101.438, 12.807]]]]
-        }, 
-        "year_of_planting": 2015,
-        "spacing_system": "3x7",
-        "rubber_clone": "RRIM 600",
-        "tree_count": null
-    },
-    {
-        "id": "TC_008-1_RASTER_NA_FALLBACK",
-        "comment": "Case: Fraction of year pixels are 0/NA. Excludes undetermined pixels from age calculation. Tests AgeMapService fallback logic.",
-        "geometry": {
-          "type": "MultiPolygon",
-          "coordinates": [[[[101.419, 12.809],[101.421, 12.811],[101.427, 12.813],[101.429, 12.811],[101.422, 12.809],[101.419, 12.809]]]]
-        }, 
-        "year_of_planting": null,
-        "spacing_system": "2.5x8",
-        "rubber_clone": "RRIM 600",
-        "tree_count": null
-    },
-    {
-        "id": "TC_008-2_RASTER_NA_FALLBACK",
-        "comment": "Case: 100% 0/NA year pixels. Tests AgeMapService fallback logic when polygon is homogeneous in 0/NA age but user input year is null, so cannot generate a reliable carbon profile.",
-        "geometry": {
-            "type": "MultiPolygon",
-            "coordinates": [
-                [
-                [
-                    [101.431, 12.953],
-                    [101.430, 12.954],
-                    [101.431, 12.955],
-                    [101.432, 12.955],
-                    [101.432, 12.955],
-                    [101.433, 12.955],
-                    [101.433, 12.954],
-                    [101.433, 12.954],
-                    [101.433, 12.954],
-                    [101.432, 12.954],
-                    [101.431, 12.954],
-                    [101.431, 12.953],
-                    [101.431, 12.953]
-                ]
-                ]
-            ]
-            }, 
-        "year_of_planting": null,
-        "spacing_system": "2.5x8",
-        "rubber_clone": "RRIM 600",
-        "tree_count": null
-    },
-    {
-        "id": "TC_008-3_RASTER_NA_FALLBACK",
-        "comment": "Case: >80% 0/NA year pixels. Tests AgeMapService fallback logic when polygon is homogeneous in 0/NA age, use user input year to generate a carbon profile.",
-        "geometry": {
-            "type": "MultiPolygon",
-            "coordinates": [
-                [
-                [
-                    [101.436, 12.951],
-                    [101.435, 12.952],
-                    [101.435, 12.953],
-                    [101.435, 12.954],
-                    [101.436, 12.954],
-                    [101.437, 12.952],
-                    [101.436, 12.951]
-                ]
-                ]
-            ]
-            }, 
-        "year_of_planting": 1992,
-        "spacing_system": "2.5x8",
-        "rubber_clone": "RRIM 600",
-        "tree_count": null
     }
 ]

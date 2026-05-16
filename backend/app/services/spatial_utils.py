@@ -6,7 +6,7 @@ import pyproj
 from shapely.ops import transform
 
 class SpatialUtils:
-    def calculate_area_ha(self, geometry_obj) -> float:
+    def calculate_area(self, geometry_obj) -> float:
         """Calculates metric area in hectares (EPSG:32647)."""
         # GeoJSON geometry dict -> Shapely geometry
         poly_geom = shape(geometry_obj) if isinstance(geometry_obj, dict) else geometry_obj
@@ -19,14 +19,18 @@ class SpatialUtils:
         )
         
         area_m2 = poly_gdf.geometry[0].area
+        return float(area_m2)
+
+    def calculate_area_ha(self, geometry_obj) -> float:
+        area_m2 = self.calculate_area(geometry_obj)
         # Convert to hectares
-        return float(area_m2 / 10000.0)  
+        return float(area_m2 / 10000.0) 
 
 
     def get_verified_tree_data(self, poly_data: dict) -> dict:
 
         area_ha = self.calculate_area_ha(
-            poly_data["a302_geometry"]
+            poly_data["merged_geometry"]
         )
 
         spacing = poly_data.get("spacing_system") or "2.5x8"

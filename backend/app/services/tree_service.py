@@ -16,7 +16,7 @@ class TreeService:
     def get_tree_count_user_input(self, poly_data: dict) -> dict:
 
         area_ha = self.spatial_utils.calculate_area_ha(
-            poly_data["a302_geometry"]
+            poly_data["merged_geometry"]
         )
         print(f"Calculated area (ha) for polygon {poly_data['id']}: {area_ha}")
 
@@ -62,7 +62,7 @@ class TreeService:
     def get_tree_count_raster_pixel(self, poly_data: dict, num_pixel: int, total_pixels: int) -> dict:
 
         area_ha = self.spatial_utils.calculate_area_ha(
-            poly_data["a302_geometry"]
+            poly_data["merged_geometry"]
         )
         
         if (num_pixel / total_pixels) > TREE_AGE_HOMOLOGOUS_THRESHOLD:

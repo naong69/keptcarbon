@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import estimate
+from app.api.routes import plantation_info, estimate
 
 def create_application() -> FastAPI:
     """
@@ -26,6 +26,13 @@ def create_application() -> FastAPI:
         estimate.router, 
         prefix="/api/v1", 
         tags=["Carbon Estimation"]
+    )
+
+    # Include the plantation info routes
+    application.include_router(
+        plantation_info.router,
+        prefix="/api/v1",
+        tags=["Plantation Management"]
     )
 
     return application
