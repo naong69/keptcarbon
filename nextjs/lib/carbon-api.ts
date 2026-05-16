@@ -33,6 +33,24 @@ export interface EstimationResponse {
     carbon_profile?: YearlyEstimate[] | null;
 }
 
+export interface LUPolygon {
+    lu_class: string;
+    lu_class_desc_th: string | null;
+    lu_class_desc_en: string | null;
+    geometry: GeoJSON.Geometry;
+    area_m2: number;
+    area_percent: number;
+}
+
+export interface PlantationInfoResponse {
+    polygon_id: string;
+    province_code: string | null;
+    geometry: GeoJSON.Geometry;
+    area_m2: number | null;
+    status: StatusMessage;
+    lu_polygon: LUPolygon[] | null;
+}
+
 /**
  * Estimate carbon for plantation polygons using the backend API
  * @param polygons Array of plantation polygons with geometry and optional parameters
@@ -42,7 +60,7 @@ export async function estimateCarbon(
     polygons: PlantationPolygon[]
 ): Promise<EstimationResponse[]> {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/estimate`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/estimate`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -63,6 +81,26 @@ export async function estimateCarbon(
         console.error("Carbon estimation API error:", error);
         throw error;
     }
+}
+
+/**
+ * Get land use classification and province for a drawn polygon
+ */
+export async function getPlantationInfo(polygon: {
+    id: string;
+    geometry: GeoJSON.Geometry;
+    project_type?: string | null;
+}): Promise<PlantationInfoResponse> {
+    const response = await fetch(`${API_BASE_URL}/api/v1/plantation-info`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(polygon),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(`Backend API error: ${response.status} ${JSON.stringify(err)}`);
+    }
+    return response.json();
 }
 
 /**

@@ -14,10 +14,8 @@ class TreeService:
         self.spatial_utils = SpatialUtils()
 
     def get_tree_count_user_input(self, poly_data: dict) -> dict:
-
-        area_ha = self.spatial_utils.calculate_area_ha(
-            poly_data["a302_geometry"]
-        )
+        geom = poly_data.get("merged_geometry") or poly_data.get("a302_geometry")
+        area_ha = self.spatial_utils.calculate_area_ha(geom)
         print(f"Calculated area (ha) for polygon {poly_data['id']}: {area_ha}")
 
         spacing = poly_data.get("spacing_system") or "2.5x8"
@@ -60,10 +58,8 @@ class TreeService:
         }
 
     def get_tree_count_raster_pixel(self, poly_data: dict, num_pixel: int, total_pixels: int) -> dict:
-
-        area_ha = self.spatial_utils.calculate_area_ha(
-            poly_data["a302_geometry"]
-        )
+        geom = poly_data.get("merged_geometry") or poly_data.get("a302_geometry")
+        area_ha = self.spatial_utils.calculate_area_ha(geom)
         
         if (num_pixel / total_pixels) > TREE_AGE_HOMOLOGOUS_THRESHOLD:
             # If the age map data is dominated by one age class, we will use the calculated tree count based on area 

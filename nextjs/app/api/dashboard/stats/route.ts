@@ -20,18 +20,18 @@ export async function GET(request: NextRequest) {
               COALESCE(NULLIF(split_part(grow_area,'-',2),''),'0')::numeric / 4.0 +
               COALESCE(NULLIF(split_part(grow_area,'-',3),''),'0')::numeric / 400.0
             ), 0) AS total_area_rai,
-            COALESCE(SUM(gee_carbon), 0) AS total_carbon
+            0 AS total_carbon
           FROM rubber_plots
         `),
 
         // Per-year for line chart
         pool.query(`
           SELECT
-            COALESCE(rubber_age, gee_age, 0)::int AS age,
-            COALESCE(SUM(gee_carbon), 0)          AS carbon,
-            COUNT(*)::int                          AS plot_count
+            COALESCE(rubber_age, 0)::int AS age,
+            0                            AS carbon,
+            COUNT(*)::int                AS plot_count
           FROM rubber_plots
-          WHERE COALESCE(rubber_age, gee_age) IS NOT NULL
+          WHERE rubber_age IS NOT NULL
           GROUP BY 1
           ORDER BY 1
         `),
@@ -40,17 +40,17 @@ export async function GET(request: NextRequest) {
         pool.query(`
           SELECT
             CASE
-              WHEN COALESCE(rubber_age, gee_age, 0) BETWEEN 1 AND 5   THEN '1-5'
-              WHEN COALESCE(rubber_age, gee_age, 0) BETWEEN 6 AND 12  THEN '6-12'
-              WHEN COALESCE(rubber_age, gee_age, 0) BETWEEN 13 AND 18 THEN '13-18'
-              WHEN COALESCE(rubber_age, gee_age, 0) >= 19             THEN '19+'
+              WHEN COALESCE(rubber_age, 0) BETWEEN 1 AND 5   THEN '1-5'
+              WHEN COALESCE(rubber_age, 0) BETWEEN 6 AND 12  THEN '6-12'
+              WHEN COALESCE(rubber_age, 0) BETWEEN 13 AND 18 THEN '13-18'
+              WHEN COALESCE(rubber_age, 0) >= 19             THEN '19+'
               ELSE 'ไม่ระบุ'
             END                        AS bucket,
             COUNT(*)::int              AS plot_count,
-            COALESCE(SUM(gee_carbon), 0) AS carbon
+            0                          AS carbon
           FROM rubber_plots
           GROUP BY 1
-          ORDER BY MIN(COALESCE(rubber_age, gee_age, 0))
+          ORDER BY MIN(COALESCE(rubber_age, 0))
         `),
 
         // Map polygons (limit 2000)
@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
               COALESCE(NULLIF(split_part(grow_area,'-',2),''),'0')::numeric / 4.0 +
               COALESCE(NULLIF(split_part(grow_area,'-',3),''),'0')::numeric / 400.0
             )                                       AS area_rai,
-            COALESCE(gee_carbon, 0)                 AS carbon,
-            COALESCE(rubber_age, gee_age, 0)        AS age,
+            0                                       AS carbon,
+            COALESCE(rubber_age, 0)                 AS age,
             ST_AsGeoJSON(geom)::json                AS geojson
           FROM rubber_plots
           WHERE geom IS NOT NULL

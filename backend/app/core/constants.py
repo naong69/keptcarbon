@@ -4,8 +4,9 @@
 TREE_AGE_HOMOLOGOUS_THRESHOLD = 0.8
 TREE_COUNT_VALIDATION_THRESHOLD = 0.05
 
-# Gorwth model parameters 
+# Growth model parameters
 GROWTH_MODEL_YEAR = 35
+MAX_TREE_AGE = 28
 
 # Biometric Constants 
 CARBON_FRACTION = 0.47 
@@ -28,6 +29,8 @@ REGION_CONFIG = {
         "lu_vector": "LU_RYG_2567.gpkg",
         "plaining_year_map": "establishment_year_rayong.tif",
         "plaining_year_map_qa": "establishment_year_rayong_qa.tif",
+        "model_used": "cubic_poly",
+        "biomass_estimation_method": "hytonen_2018",
         "biomass_estimation_tables": {
             ("RRIM 600", "cubic_poly", "hytonen_2018"): "rrim600_cubic_poly_hytonen_rayong.csv",
             ("RRIT 251", "cubic_poly", "hytonen_2018"): "rrit251_cubic_poly_hytonen_rayong.csv"

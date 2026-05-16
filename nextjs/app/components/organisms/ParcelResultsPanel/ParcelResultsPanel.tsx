@@ -3,16 +3,11 @@ import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { carbonForAge } from "@/lib/map-utils";
 import { useAuth } from "@/lib/auth-context";
-import { estimateCarbon, type PlantationPolygon } from "@/lib/carbon-api";
-import { CarbonBarChart, buildBarPoints, carbonCo2 } from "./CarbonBarChart";
+import { CarbonBarChart, buildBarPoints, carbonCo2, CUT_AGE, type BarPoint } from "./CarbonBarChart";
+import { estimateCarbon, type PlantationPolygon, type EstimationResponse, type YearlyEstimate } from "@/lib/carbon-api";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────
-export interface CarbonResultForMap {
-    plotIdx: number;
-    co2Now: number;
-}
-
 type Props = {
     searchRunning: boolean;
     searchErr: string | null;
@@ -29,7 +24,11 @@ type Props = {
     onStepChange: (step: 1 | 2 | 3) => void;
     selectedMapPlotIndex?: number | "total";
     onMapPlotSelected?: (idx: number | "total") => void;
-    onCarbonResults?: (results: CarbonResultForMap[]) => void;
+    onDeleteParcel?: (idx: number) => void;
+    onDrawMore?: () => void;
+    isDrawing?: boolean;
+    onFinishDraw?: () => void;
+    onCancelDraw?: () => void;
 };
 
 type PlotTab = "analyze" | "forecast";
@@ -37,18 +36,26 @@ type ForecastYr = 3 | 5 | 7;
 type SubStep = "form" | "carbon" | "save";
 
 interface PlotFormData {
+    plantStatus: "new" | "old" | "";
     plantYear: string;
     treeCount: string;
     variety: string;
     spacing: string;
+    luChecked: Record<string, boolean>;
+    luMockData: Record<string, { rai: number, pct: number }>;
 }
 
 const VARIETY_OPTIONS = [
     "RRIM 600", "GT1", "BPM 24", "PB 235", "PB 260",
     "RRIT 408", "RRIT 251", "สงขลา 36", "RRIM 712", "อื่นๆ",
 ];
-const SPACING_OPTIONS = ["2.5*8", "3*7", "2.5*7", "3*6"];
-const YEAR_OPTIONS = Array.from({ length: 50 }, (_, i) => String(new Date().getFullYear() + 543 - i));
+const SPACING_OPTIONS = ["2.5x8", "3x7", "2.5x7", "2x6", "3x8"];
+
+const CURRENT_CE = new Date().getFullYear();
+const CURRENT_BE = CURRENT_CE + 543;
+
+const NEW_YEAR_OPTIONS = Array.from({ length: 11 }, (_, i) => String(CURRENT_BE + i));
+const OLD_YEAR_OPTIONS = Array.from({ length: 2572 - 2534 + 1 }, (_, i) => String(2572 - i));
 
 interface CarbonResult {
     plotIdx: number;
@@ -72,8 +79,6 @@ interface PlotInfo {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
-const CURRENT_CE = new Date().getFullYear();
-const CURRENT_BE = CURRENT_CE + 543;
 
 const THAI_PROVINCES = [
     "กระบี่", "กาญจนบุรี", "กาฬสินธุ์", "กำแพงเพชร", "ขอนแก่น", "จันทบุรี", "ฉะเชิงเทรา",
@@ -100,12 +105,10 @@ function parseRai(v: unknown): number {
 
 function computePlot(feat: GeoJSON.Feature): PlotInfo {
     const p = (feat.properties ?? {}) as Record<string, unknown>;
-    const areaRai = parseRai(p.grow_area);
+    const areaRai = parseRai(p.grow_area || p.rai);
 
-    // Determine backend plant year
-    let bPlantYear = Number(p.gee_plant_year || p.grow_year || 0);
-    // Determine backend age
-    let bAge = Number(p.gee_age || p.rubber_age || 0);
+    let bPlantYear = Number(p.grow_year || 0);
+    let bAge = Number(p.rubber_age || 0);
 
     const CURRENT_BE = new Date().getFullYear() + 543;
 
@@ -128,8 +131,8 @@ function computePlot(feat: GeoJSON.Feature): PlotInfo {
         plantYearBE: bPlantYear,
         areaRai,
         trees: 0,
-        co2: Number(p.gee_carbon ?? 0),
-        confidence: Number(p.gee_confidence ?? 0),
+        co2: 0,
+        confidence: 0,
         province: String(p.province ?? ""),
     };
 }
@@ -144,11 +147,77 @@ function ageDistribution(age: number, conf: number) {
         .filter(({ a }) => a > 0);
 }
 
+function profileToBarPoints(profile: YearlyEstimate[], startAge: number): BarPoint[] {
+    return profile.map((item, i) => {
+        const age = startAge + i;
+        return {
+            age,
+            yearBE: item.year + 543,
+            co2: item.total_carbon_tCO2e,
+            cycle: Math.floor(age / CUT_AGE),
+            cycleAge: age,
+            errorMargin: (item.ci_upper_tCO2e - item.ci_lower_tCO2e) / 2,
+        };
+    });
+}
+
+function aggregateProfiles(responses: EstimationResponse[], startAges: number[]): BarPoint[] {
+    const profiles = responses.map(r => r.carbon_profile ?? []);
+    if (!profiles.length || !profiles[0].length) return [];
+    const len = Math.min(...profiles.map(p => p.length));
+    const pts: BarPoint[] = [];
+    for (let j = 0; j < len; j++) {
+        const yearBE = profiles[0][j].year + 543;
+        let totalCo2 = 0, sumSqErr = 0, totalAge = 0;
+        for (let i = 0; i < profiles.length; i++) {
+            const item = profiles[i][j];
+            if (!item) continue;
+            totalCo2 += item.total_carbon_tCO2e;
+            const err = (item.ci_upper_tCO2e - item.ci_lower_tCO2e) / 2;
+            sumSqErr += err * err;
+            totalAge += startAges[i] + j;
+        }
+        const avgAge = Math.round(totalAge / profiles.length);
+        if (avgAge > 35) break;
+        pts.push({
+            age: avgAge,
+            yearBE,
+            co2: totalCo2,
+            cycle: Math.floor(avgAge / CUT_AGE),
+            cycleAge: avgAge,
+            errorMargin: Math.sqrt(sumSqErr),
+        });
+    }
+    return pts;
+}
+
 function forecastPts(age: number, trees: number, years: ForecastYr) {
     return Array.from({ length: years + 1 }, (_, i) => ({
         yearBE: CURRENT_BE + i,
         co2: trees > 0 ? carbonForAge(age + i, trees).co2 : 0,
     }));
+}
+
+function generateMockLU(totalRai: number, checked: Record<string, boolean>) {
+    const keys = Object.keys(checked).filter(k => checked[k] && !['U', 'W'].includes(k)); // Exclude disabled ones
+    if (keys.length === 0) return {};
+    const res: Record<string, { rai: number, pct: number }> = {};
+    if (keys.length === 1) {
+        res[keys[0]] = { rai: totalRai, pct: 100 };
+        return res;
+    }
+    const basePct = Math.floor(100 / keys.length);
+    let remaining = 100;
+    keys.forEach((k, i) => {
+        if (i === keys.length - 1) {
+            res[k] = { rai: (remaining / 100) * totalRai, pct: remaining };
+        } else {
+            const pct = Math.max(1, basePct + Math.floor(Math.random() * 10 - 5));
+            res[k] = { rai: (pct / 100) * totalRai, pct };
+            remaining -= pct;
+        }
+    });
+    return res;
 }
 
 function summaryForecast(plots: PlotInfo[], years: ForecastYr) {
@@ -221,14 +290,7 @@ function AgeBarChart({ age, conf, trees, isMobile }: { age: number; conf: number
                                 fill={isMain ? "#065f46" : isHov ? "#059669" : "#94a3b8"}>
                                 {pct}%
                             </text>
-                            {/* age label below */}
-                            <text x={cx} y={BASE_Y + 22} textAnchor="middle" fontSize={isMobile ? 16 : 16}
-                                fontWeight={isMain ? "800" : "500"}
-                                fill={isMain ? "#059669" : isHov ? "#10b981" : "#94a3b8"}>
-                                {a}
-                            </text>
-                            {/* age unit */}
-                            <text x={cx} y={BASE_Y + 40} textAnchor="middle" fontSize={isMobile ? 13 : 12} fill="#cbd5e1" fontWeight="400">ปี</text>
+                            {/* age labels removed per user request */}
 
                             {/* tooltip */}
                             {isHov && (
@@ -385,9 +447,13 @@ export function ParcelResultsPanel({
     onStepChange,
     selectedMapPlotIndex = "total",
     onMapPlotSelected,
-    onCarbonResults,
+    onDeleteParcel,
+    onDrawMore,
+    isDrawing,
+    onFinishDraw,
+    onCancelDraw,
 }: Props) {
-    const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+    const [expandedIdx, setExpandedIdx] = useState<number | null>(0);
     const [plotTabs, setPlotTabs] = useState<Record<number, PlotTab>>({});
     const [forecastYrs, setForecastYrs] = useState<Record<number, ForecastYr>>({});
     const [summaryFcYrs, setSummaryFcYrs] = useState<ForecastYr>(7);
@@ -425,139 +491,97 @@ export function ParcelResultsPanel({
     const [ownerName, setOwnerName] = useState(userDisplayName);
     const [province, setProvince] = useState("");
     const [saveState, setSaveState] = useState<"idle" | "saving" | "done">("idle");
+    const [showInputDetails, setShowInputDetails] = useState(false);
     const [plotForms, setPlotForms] = useState<PlotFormData[]>([]);
     const [carbonResults, setCarbonResults] = useState<CarbonResult[]>([]);
+    const [backendResponses, setBackendResponses] = useState<EstimationResponse[] | null>(null);
     const [processingCarbon, setProcessingCarbon] = useState(false);
+    const [carbonErr, setCarbonErr] = useState<string | null>(null);
 
     // Initialize plotForms automatically when ready
     useEffect(() => {
-        if (searchCount !== null && !searchRunning && !searchErr && plots.length > 0 && plotForms.length === 0) {
-            setPlotForms(parcelFeatures.map((feat) => {
-                const props = feat.properties as any || {};
-                return {
-                    plantYear: props.plantYearBE ? String(props.plantYearBE) : "",
-                    treeCount: props.trees ? String(props.trees) : "",
-                    variety: props.variety || "",
-                    spacing: props.spacing || "",
-                };
-            }));
+        if (plots.length !== plotForms.length) {
+            setPlotForms(prev => {
+                if (plots.length > prev.length) {
+                    const next = [...prev];
+                    for (let i = next.length; i < plots.length; i++) {
+                        const feat = parcelFeatures[i];
+                        const props = feat?.properties as any || {};
+                        const initialLU = { A: true, A302: true };
+                        next.push({
+                            plantStatus: "",
+                            plantYear: props.plantYearBE ? String(props.plantYearBE) : "",
+                            treeCount: props.trees ? String(props.trees) : "",
+                            variety: props.variety || "",
+                            spacing: props.spacing || "",
+                            luChecked: initialLU,
+                            luMockData: generateMockLU(plots[i].areaRai, initialLU)
+                        });
+                    }
+                    return next;
+                } else {
+                    return prev.slice(0, plots.length);
+                }
+            });
         }
-    }, [searchCount, searchRunning, searchErr, plots, plotForms.length, parcelFeatures]);
+    }, [plots, plotForms.length, parcelFeatures]);
 
     const handleProcessCarbon = async () => {
+        setCarbonErr(null);
         setProcessingCarbon(true);
         const CURRENT_BE_NOW = new Date().getFullYear() + 543;
+        const SUPPORTED_CLONES = ["RRIM 600", "RRIT 251"];
 
-        // Build plantation polygons for API call
-        const polygonsToEstimate: PlantationPolygon[] = plots.map((p, i) => {
+        const polygons: PlantationPolygon[] = parcelFeatures.map((feat, i) => {
             const form = plotForms[i];
-            const feat = parcelFeatures[i];
-            const userPlantYear = form?.plantYear ? parseInt(form.plantYear) : null;
-            const userTrees = form?.treeCount ? parseInt(form.treeCount) : null;
-            const userSpacing = form?.spacing || null;
-            const userVariety = form?.variety || null;
-
+            const props = (feat.properties ?? {}) as Record<string, unknown>;
+            const plantYearBE = form?.plantYear ? parseInt(form.plantYear) : 0;
             return {
-                id: `plot_${i}`,
+                id: String(props.id || `plot-${i + 1}`),
                 geometry: feat.geometry,
-                year_of_planting: userPlantYear || (p.plantYearBE > 0 ? p.plantYearBE : null),
-                rubber_clone: userVariety || "RRIM 600",
-                tree_count: userTrees || (p.areaRai > 0 ? Math.round(p.areaRai * 76) : null),
-                spacing_system: userSpacing || "3*7",
+                year_of_planting: plantYearBE > 0 ? plantYearBE - 543 : null,
+                rubber_clone: (form?.variety && SUPPORTED_CLONES.includes(form.variety)) ? form.variety : null,
+                tree_count: form?.treeCount ? (parseInt(form.treeCount) || null) : null,
+                spacing_system: form?.spacing || null,
             };
         });
 
         try {
-            // Call the real backend API
-            const apiResults = await estimateCarbon(polygonsToEstimate);
+            const responses = await estimateCarbon(polygons);
+            setBackendResponses(responses);
 
-            // Convert API results to CarbonResult format
-            const results: CarbonResult[] = plots.map((p, i) => {
+            const results: CarbonResult[] = responses.map((resp, i) => {
+                const profile = resp.carbon_profile ?? [];
                 const form = plotForms[i];
-                const apiResult = apiResults[i];
-                const userPlantYear = form?.plantYear ? parseInt(form.plantYear) : 0;
+                const plantYearBE = form?.plantYear ? parseInt(form.plantYear) : 0;
+                const startAge = plantYearBE > 0 ? CURRENT_BE_NOW - plantYearBE : (plots[i]?.age || 5);
+                const finalPlantYear = plantYearBE > 0 ? plantYearBE : (plots[i]?.plantYearBE || CURRENT_BE_NOW - startAge);
                 const userTrees = form?.treeCount ? parseInt(form.treeCount) : 0;
-
-                const userAge = userPlantYear > 0 ? CURRENT_BE_NOW - userPlantYear : 0;
-                const finalAge = userAge > 0 ? userAge : (p.age > 0 ? p.age : 5);
-                const finalPlantYear = userPlantYear > 0 ? userPlantYear : (p.plantYearBE > 0 ? p.plantYearBE : CURRENT_BE_NOW - finalAge);
-
-                const estimatedTrees = Math.round(p.areaRai * 76);
-                const finalTrees = userTrees > 0 ? userTrees : estimatedTrees;
-
-                const finalSpacing = form?.spacing || "3*7";
-                const finalVariety = form?.variety || "RRIM 600";
-
-                // Get CO2 from API if available, fall back to mockup calculation
-                let co2Now = 0;
-                if (apiResult?.carbon_profile && apiResult.carbon_profile.length > 0) {
-                    // Use the current year CO2 from API (first entry or matching age)
-                    const currentYearData = apiResult.carbon_profile[0];
-                    co2Now = currentYearData?.total_carbon_tCO2e || 0;
-                } else {
-                    // Fall back to mockup calculation
-                    co2Now = (finalAge > 0 && finalTrees > 0) ? carbonCo2(finalAge, finalTrees, finalSpacing) : 0;
-                }
-
+                const finalTrees = userTrees > 0 ? userTrees : Math.round((plots[i]?.areaRai || 1) * 76);
                 return {
                     plotIdx: i,
-                    age: finalAge,
+                    age: startAge,
                     plantYearBE: finalPlantYear,
                     trees: finalTrees,
-                    spacing: finalSpacing,
-                    variety: finalVariety,
-                    co2Now,
-                    source: (userPlantYear > 0 || userTrees > 0) ? "user" : "backend",
-                };
-            });
-
-            setCarbonResults(results);
-            onCarbonResults?.(results.map(r => ({ plotIdx: r.plotIdx, co2Now: r.co2Now })));
-            if (onMapPlotSelected) onMapPlotSelected("total");
-            setSubStep("carbon");
-            onStepChange(3);
-        } catch (error) {
-            console.error("Failed to estimate carbon:", error);
-            // Fall back to mockup calculation on error
-            const results: CarbonResult[] = plots.map((p, i) => {
-                const form = plotForms[i];
-                const userPlantYear = form?.plantYear ? parseInt(form.plantYear) : 0;
-                const userTrees = form?.treeCount ? parseInt(form.treeCount) : 0;
-                const userSpacing = form?.spacing || "";
-                const userVariety = form?.variety || "";
-
-                const userAge = userPlantYear > 0 ? CURRENT_BE_NOW - userPlantYear : 0;
-                const finalAge = userAge > 0 ? userAge : (p.age > 0 ? p.age : 5);
-                const finalPlantYear = userPlantYear > 0 ? userPlantYear : (p.plantYearBE > 0 ? p.plantYearBE : CURRENT_BE_NOW - finalAge);
-                const estimatedTrees = Math.round(p.areaRai * 76);
-                const finalTrees = userTrees > 0 ? userTrees : estimatedTrees;
-                const finalSpacing = userSpacing || "3*7";
-                const finalVariety = userVariety || "RRIM 600";
-                const co2Now = (finalAge > 0 && finalTrees > 0) ? carbonCo2(finalAge, finalTrees, finalSpacing) : 0;
-
-                return {
-                    plotIdx: i,
-                    age: finalAge,
-                    plantYearBE: finalPlantYear,
-                    trees: finalTrees,
-                    spacing: finalSpacing,
-                    variety: finalVariety,
-                    co2Now,
-                    source: (userPlantYear > 0 || userTrees > 0) ? "user" : "backend",
+                    spacing: form?.spacing || "2.5x8",
+                    variety: form?.variety || "RRIM 600",
+                    co2Now: profile[0]?.total_carbon_tCO2e ?? 0,
+                    source: "backend" as const,
                 };
             });
             setCarbonResults(results);
-            onCarbonResults?.(results.map(r => ({ plotIdx: r.plotIdx, co2Now: r.co2Now })));
             if (onMapPlotSelected) onMapPlotSelected("total");
             setSubStep("carbon");
             onStepChange(3);
+        } catch (err) {
+            setCarbonErr(err instanceof Error ? err.message : String(err));
         } finally {
             setProcessingCarbon(false);
         }
     };
 
 
-    if (!(searchRunning || searchErr || searchCount !== null)) return null;
+    // Removed: if (!(searchRunning || searchErr || searchCount !== null)) return null;
 
     const handleSave = async (overrideResults?: CarbonResult[]) => {
         const resultsToSave = overrideResults || carbonResults;
@@ -658,7 +682,7 @@ export function ParcelResultsPanel({
         );
     }
 
-    if (searchCount === null) return null;
+    // Removed: if (searchCount === null) return null;
 
     // ── Step 2: Data entry form ────────────────────────────────
     if (currentStep === 2) {
@@ -667,11 +691,35 @@ export function ParcelResultsPanel({
         };
         return (
             <div className="prp-shell">
-                <div className="prp-header-block">
-                    <div className="prp-main-title" style={{ fontSize: isMobile ? 16 : 18 }}>
-                        <i className="bi bi-pencil-square me-2" style={{ color: "#10b981" }} />กรอกข้อมูลแปลง
+
+
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div className="prp-header-block" style={{ marginBottom: 0 }}>
+                        <div className="prp-main-title" style={{ fontSize: isMobile ? 16 : 18 }}>
+                            <i className="bi bi-pencil-square me-2" style={{ color: "#10b981" }} />กรอกข้อมูลแปลง
+                        </div>
+                        <div className="prp-subtitle">กรอกหรือข้ามได้ — ข้อมูลจะนำไปประมวลผลคาร์บอน</div>
                     </div>
-                    <div className="prp-subtitle">กรอกหรือข้ามได้ — ข้อมูลจะนำไปประมวลผลคาร์บอน</div>
+                    {onBack && (
+                        <div
+                            onClick={onBack}
+                            style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "#64748b",
+                                cursor: "pointer",
+                                background: "rgba(100,116,139,0.08)",
+                                padding: "6px 10px",
+                                borderRadius: 8,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4,
+                                transition: "all 0.2s"
+                            }}
+                        >
+                            <i className="bi bi-arrow-left-circle" /> ย้อนกลับ
+                        </div>
+                    )}
                 </div>
 
                 {/* Project name — shared */}
@@ -682,6 +730,16 @@ export function ParcelResultsPanel({
                     <input className="prp-input" style={{ marginBottom: 0 }} placeholder="เช่น โครงการที่1" value={projectName} onChange={e => setProjectName(e.target.value)} />
                 </div>
 
+                {/* Summary of drawn parcels */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, padding: "0 4px" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>
+                        แปลงที่วาดแล้ว ({plots.length})
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#10b981" }}>
+                        {totalArea.toFixed(2)} ไร่
+                    </div>
+                </div>
+
                 {/* Per-plot fields */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {plots.map((p, i) => {
@@ -689,106 +747,238 @@ export function ParcelResultsPanel({
                         return (
                             <div key={i} style={{ background: "#fff", borderRadius: 14, border: "1px solid rgba(16,185,129,0.15)", overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.04)" }}>
                                 {/* Plot header */}
-                                <div style={{ background: "linear-gradient(135deg,rgba(16,185,129,0.08),rgba(5,150,105,0.04))", padding: "10px 14px", borderBottom: "1px solid rgba(16,185,129,0.1)", display: "flex", alignItems: "center", gap: 10 }}>
-                                    <div style={{ width: 28, height: 28, borderRadius: 8, background: "#10b981", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13 }}>{i + 1}</div>
-                                    <div>
+                                <div
+                                    onClick={() => {
+                                        setExpandedIdx(expandedIdx === i ? null : i);
+                                        if (parcelFeatures[i]) {
+                                            onFlyTo(parcelFeatures[i]);
+                                            onMapPlotSelected?.(i);
+                                        }
+                                    }}
+                                    style={{
+                                        background: "linear-gradient(135deg,rgba(16,185,129,0.08),rgba(5,150,105,0.04))",
+                                        padding: "10px 14px",
+                                        borderBottom: "none",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 10,
+                                        cursor: "pointer",
+                                        userSelect: "none"
+                                    }}
+                                >
+                                    <div style={{ pointerEvents: 'none', width: 28, height: 28, borderRadius: 8, background: "#10b981", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13 }}>{i + 1}</div>
+                                    <div style={{ pointerEvents: 'none', flex: 1 }}>
                                         <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>แปลงที่ {i + 1}</div>
-                                        <div style={{ fontSize: 11, color: "#64748b" }}>{p.areaRai > 0 ? `${p.areaRai.toFixed(2)} ไร่` : "—"}</div>
+                                        {p.areaRai > 0 && (
+                                            <div style={{ fontSize: 11, color: "#64748b" }}>{p.areaRai.toFixed(2)} ไร่</div>
+                                        )}
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (confirm(`ลบแปลงที่ ${i + 1} หรือไม่?`)) {
+                                                    onDeleteParcel?.(i);
+                                                }
+                                            }}
+                                            style={{ border: "none", background: "none", color: "#94a3b8", cursor: "pointer", fontSize: 16, padding: 4 }}
+                                        >
+                                            <i className="bi bi-trash" />
+                                        </button>
+                                        <span className={`bi bi-chevron-${expandedIdx === i ? 'up' : 'down'}`} style={{ pointerEvents: 'none', color: "#64748b", fontSize: 14 }} />
                                     </div>
                                 </div>
-                                {/* Fields grid */}
-                                <div style={{
-                                    display: "grid",
-                                    gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-                                    gap: "16px 20px",
-                                    padding: isMobile ? "16px" : "20px 24px",
-                                    background: "#fff"
-                                }}>
-                                    <div className="prp-field-group">
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                                            <i className="bi bi-calendar-event" style={{ color: "#10b981" }} /> ปีที่ปลูก (พ.ศ.)
+                                {expandedIdx === i && (
+                                    <>
+                                        {/* Status Selection */}
+                                        <div style={{ padding: isMobile ? "16px 16px 0" : "20px 24px 0", background: "#fff" }}>
+                                            <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                                <i className="bi bi-info-circle" style={{ color: "#10b981" }} /> สถานะแปลง
+                                            </div>
+                                            <div style={{ display: "flex", gap: 16 }}>
+                                                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                                                    <input type="radio" name={`status-${i}`} value="new" checked={form.plantStatus === "new"} onChange={() => { updateForm(i, "plantStatus", "new"); updateForm(i, "plantYear", ""); }} />
+                                                    เริ่มปลูก
+                                                </label>
+                                                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                                                    <input type="radio" name={`status-${i}`} value="old" checked={form.plantStatus === "old"} onChange={() => { updateForm(i, "plantStatus", "old"); updateForm(i, "plantYear", ""); }} />
+                                                    ปลูกมาแล้ว
+                                                </label>
+                                            </div>
                                         </div>
-                                        <select
-                                            className="prp-input"
-                                            style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
-                                            value={form.plantYear}
-                                            onChange={e => updateForm(i, "plantYear", e.target.value)}
-                                        >
-                                            <option value="">— เลือกปีที่เริ่มปลูก —</option>
-                                            {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="prp-field-group">
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                                            <i className="bi bi-tree" style={{ color: "#10b981" }} /> จำนวนต้นยาง
+
+                                        {/* Fields grid */}
+                                        <div style={{
+                                            display: "grid",
+                                            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                                            gap: "16px 20px",
+                                            padding: isMobile ? "16px" : "20px 24px",
+                                            background: "#fff"
+                                        }}>
+                                            <div className="prp-field-group">
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                                    <i className="bi bi-calendar-event" style={{ color: "#10b981" }} /> ปีที่ปลูก (พ.ศ.)
+                                                </div>
+                                                <select
+                                                    className="prp-input"
+                                                    style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
+                                                    value={form.plantYear}
+                                                    onChange={e => updateForm(i, "plantYear", e.target.value)}
+                                                    disabled={!form.plantStatus}
+                                                >
+                                                    <option value="">— เลือกปีที่ปลูก —</option>
+                                                    {(form.plantStatus === "new" ? NEW_YEAR_OPTIONS : form.plantStatus === "old" ? OLD_YEAR_OPTIONS : []).map(y => <option key={y} value={y}>{y}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="prp-field-group">
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                                    <i className="bi bi-tags" style={{ color: "#10b981" }} /> พันธุ์ยาง
+                                                </div>
+                                                <select
+                                                    className="prp-input"
+                                                    style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
+                                                    value={form.variety}
+                                                    onChange={e => updateForm(i, "variety", e.target.value)}
+                                                >
+                                                    <option value="">— เลือกสายพันธุ์ยาง —</option>
+                                                    {VARIETY_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="prp-field-group">
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                                    <i className="bi bi-tree" style={{ color: "#10b981" }} /> จำนวนต้นยาง
+                                                </div>
+                                                <input
+                                                    className="prp-input"
+                                                    style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
+                                                    type="number"
+                                                    placeholder="ระบุจำนวนต้น เช่น 70"
+                                                    value={form.treeCount}
+                                                    onChange={e => updateForm(i, "treeCount", e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="prp-field-group">
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                                    <i className="bi bi-arrows-expand" style={{ color: "#10b981" }} /> ระยะปลูก (ม.)
+                                                </div>
+                                                <select
+                                                    className="prp-input"
+                                                    style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
+                                                    value={form.spacing}
+                                                    onChange={e => updateForm(i, "spacing", e.target.value)}
+                                                >
+                                                    <option value="">— เลือกระยะปลูก —</option>
+                                                    {SPACING_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                                </select>
+                                            </div>
                                         </div>
-                                        <input
-                                            className="prp-input"
-                                            style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
-                                            type="number"
-                                            placeholder="ระบุจำนวนต้น เช่น 70"
-                                            value={form.treeCount}
-                                            onChange={e => updateForm(i, "treeCount", e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="prp-field-group">
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                                            <i className="bi bi-tags" style={{ color: "#10b981" }} /> พันธุ์ยาง
+
+                                        {/* Land Use Checkboxes */}
+                                        <div style={{ padding: isMobile ? "0 16px 16px" : "0 24px 20px", background: "#fff" }}>
+                                            <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                                                <i className="bi bi-layers" style={{ color: "#10b981" }} /> ชั้นข้อมูลการใช้ประโยชน์ที่ดิน (กรมพัฒนาที่ดิน)
+                                            </div>
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
+                                                {[
+                                                    { id: "F", label: "F พื้นที่ป่าไม้", fixed: false },
+                                                    { id: "A", label: "A พื้นที่เกษตรกรรม", fixed: true },
+                                                    { id: "A302", label: "A302 ยางพารา (หมวดย่อย A)", fixed: true, indent: true },
+                                                    { id: "A303", label: "A303 ปาล์มน้ำมัน (หมวดย่อย A)", fixed: false, indent: true },
+                                                    { id: "A304", label: "A304 ไม้ผล (หมวดย่อย A)", fixed: false, indent: true },
+                                                    { id: "M", label: "M พื้นที่อื่นๆ", fixed: false },
+                                                    { id: "U", label: "U พื้นที่สิ่งปลูกสร้าง", fixed: false, disabled: true },
+                                                    { id: "W", label: "W แหล่งน้ำ", fixed: false, disabled: true },
+                                                ].map(lu => {
+                                                    const isChecked = form.luChecked?.[lu.id] || false;
+                                                    const mockData = form.luMockData?.[lu.id];
+                                                    return (
+                                                        <label key={lu.id} style={{
+                                                            display: "flex", alignItems: "center", gap: 8, cursor: lu.disabled || lu.fixed ? "not-allowed" : "pointer",
+                                                            opacity: lu.disabled ? 0.5 : 1, paddingLeft: lu.indent ? 24 : 0
+                                                        }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isChecked}
+                                                                disabled={lu.fixed || lu.disabled}
+                                                                style={{ accentColor: lu.disabled ? "#000" : "#10b981", width: 16, height: 16 }}
+                                                                onChange={(e) => {
+                                                                    const newChecked = { ...form.luChecked, [lu.id]: e.target.checked };
+                                                                    setPlotForms(prev => prev.map((f, idx) => idx === i ? { ...f, luChecked: newChecked, luMockData: generateMockLU(p.areaRai, newChecked) } : f));
+                                                                }}
+                                                            />
+                                                            <span style={{ flex: 1, color: lu.disabled ? "#000" : "#334155", fontWeight: isChecked ? 600 : 400 }}>{lu.label}</span>
+                                                            <span style={{ color: (mockData && mockData.rai > 0) ? "#059669" : "#94a3b8", fontSize: 12, fontWeight: 700 }}>
+                                                                {(mockData?.rai || 0).toFixed(2)} ไร่ <span style={{ opacity: 0.7, fontSize: 11 }}>({mockData?.pct || 0}%)</span>
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+
                                         </div>
-                                        <select
-                                            className="prp-input"
-                                            style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
-                                            value={form.variety}
-                                            onChange={e => updateForm(i, "variety", e.target.value)}
-                                        >
-                                            <option value="">— เลือกสายพันธุ์ยาง —</option>
-                                            {VARIETY_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="prp-field-group">
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                                            <i className="bi bi-arrows-expand" style={{ color: "#10b981" }} /> ระยะปลูก (ม.)
-                                        </div>
-                                        <select
-                                            className="prp-input"
-                                            style={{ marginBottom: 0, height: 46, borderRadius: 10, border: "1.5px solid #e2e8f0", padding: "0 12px" }}
-                                            value={form.spacing}
-                                            onChange={e => updateForm(i, "spacing", e.target.value)}
-                                        >
-                                            <option value="">— เลือกระยะปลูก —</option>
-                                            {SPACING_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
+                                    </>
+                                )}
                             </div>
                         );
                     })}
                 </div>
 
+                {/* Drawing placeholder card */}
+                {isDrawing && (
+                    <div style={{
+                        background: "rgba(16,185,129,0.03)",
+                        border: "2px dashed rgba(16,185,129,0.4)",
+                        borderRadius: 14,
+                        padding: "24px 16px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 16,
+                    }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                            <div className="mds-dot-pulse" style={{ background: "#10b981", width: 10, height: 10, margin: 0 }} />
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#059669" }}>กำลังวาดแปลงใหม่บนแผนที่...</div>
+                            <div style={{ fontSize: 12, color: "#64748b", textAlign: "center" }}>คลิกบนแผนที่เพื่อเพิ่มจุดขอบเขต หรือดับเบิลคลิกเพื่อปิดแปลง</div>
+                        </div>
+                        <div style={{ display: "flex", gap: 12, width: "100%" }}>
+                            <button
+                                onClick={onCancelDraw}
+                                style={{ flex: 1, background: "#fff", border: "1px solid #cbd5e1", color: "#64748b", padding: "10px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+                            >
+                                <i className="bi bi-x-circle me-1" /> ยกเลิก
+                            </button>
+                            <button
+                                onClick={onFinishDraw}
+                                style={{ flex: 1, background: "linear-gradient(135deg,#10b981,#059669)", border: "none", color: "#fff", padding: "10px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 10px rgba(16,185,129,0.2)" }}
+                            >
+                                <i className="bi bi-check-circle me-1" /> วาดเสร็จแล้ว
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Action buttons */}
+                {carbonErr && (
+                    <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)", borderRadius: 10, fontSize: 12, color: "#dc2626", display: "flex", alignItems: "flex-start", gap: 8 }}>
+                        <i className="bi bi-exclamation-triangle-fill" style={{ flexShrink: 0, marginTop: 1 }} />
+                        <span>{carbonErr}</span>
+                    </div>
+                )}
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
                     <button
                         className="prp-btn-primary"
-                        onClick={handleProcessCarbon}
+                        onClick={() => { void handleProcessCarbon(); }}
                         disabled={!projectName.trim() || processingCarbon}
                         style={{
-                            background: projectName.trim() && !processingCarbon ? "linear-gradient(135deg,#10b981,#059669)" : "#cbd5e1",
-                            cursor: projectName.trim() && !processingCarbon ? "pointer" : "not-allowed",
-                            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                            background: (projectName.trim() && !processingCarbon) ? "linear-gradient(135deg,#10b981,#059669)" : "#cbd5e1",
+                            cursor: (projectName.trim() && !processingCarbon) ? "pointer" : "not-allowed"
                         }}
                     >
                         {processingCarbon ? (
-                            <>
-                                <span style={{
-                                    width: 16, height: 16, border: "2.5px solid rgba(255,255,255,0.4)",
-                                    borderTopColor: "#fff", borderRadius: "50%",
-                                    display: "inline-block",
-                                    animation: "prp-spin 0.7s linear infinite",
-                                }} />
-                                กำลังวิเคราะห์คาร์บอน...
-                            </>
+                            <><span className="s1-spin" style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", marginRight: 8 }} />กำลังประมวลผล...</>
                         ) : (
-                            <><i className="bi bi-graph-up-arrow" />ประมวลผลคาร์บอน</>
+                            <><i className="bi bi-graph-up-arrow me-2" />ประมวลผลคาร์บอน</>
                         )}
                     </button>
                     <button
@@ -806,9 +996,12 @@ export function ParcelResultsPanel({
                             <><i className="bi bi-floppy-disk me-2" />บันทึกลงฐานข้อมูล</>
                         )}
                     </button>
-                    <button className="prp-btn-ghost" onClick={onReset}>
-                        <i className="bi bi-x-circle me-1" />ยกเลิก
-                    </button>
+                    {onDrawMore && !isDrawing && (
+                        <button className="prp-btn-ghost" style={{ background: "rgba(16,185,129,0.1)", color: "#059669" }} onClick={onDrawMore}>
+                            <i className="bi bi-pencil-square me-1" /> วาดแปลงเพิ่ม
+                        </button>
+                    )}
+
                 </div>
             </div>
         );
@@ -821,40 +1014,47 @@ export function ParcelResultsPanel({
             const isTotal = selectedMapPlotIndex === "total";
             const cr = typeof selectedMapPlotIndex === "number" ? carbonResults[selectedMapPlotIndex] : null;
 
-            let pts: any[] = [];
+            let pts: BarPoint[] = [];
             let summaryTotalCo2 = 0;
             let summaryTotalTrees = 0;
 
             if (isTotal && carbonResults.length > 0) {
-                const CURRENT_BE = new Date().getFullYear() + 543;
                 summaryTotalTrees = carbonResults.reduce((sum, c) => sum + c.trees, 0);
                 summaryTotalCo2 = carbonResults.reduce((sum, c) => sum + c.co2Now, 0);
 
-                // Track each plot independently through 35-year simulation
-                const plotStates = carbonResults.map(c => ({ continuousAge: c.age }));
-                const N = plotStates.length;
-
-                for (let i = 0; i < 35; i++) {
-                    const yearBE = CURRENT_BE + i;
-                    let totalCo2 = 0, totalContinuousAge = 0;
-                    plotStates.forEach((state, idx) => {
-                        totalCo2 += carbonCo2(state.continuousAge, carbonResults[idx].trees, carbonResults[idx].spacing);
-                        totalContinuousAge += state.continuousAge;
-                        state.continuousAge++;
-                    });
-                    const avgContinuousAge = Math.round(totalContinuousAge / N);
-                    if (avgContinuousAge > 35) break;
-
-                    pts.push({
-                        age: avgContinuousAge,
-                        yearBE,
-                        co2: totalCo2,
-                        cycle: Math.floor(i / 7),
-                        cycleAge: avgContinuousAge,
-                    });
+                if (backendResponses && backendResponses.length > 0) {
+                    pts = aggregateProfiles(backendResponses, carbonResults.map(c => c.age));
+                } else {
+                    const CURRENT_BE = new Date().getFullYear() + 543;
+                    const initialPlotCarbons = carbonResults.map(c => carbonCo2(c.age, c.trees, c.spacing));
+                    const plotStates = carbonResults.map(c => ({ continuousAge: c.age }));
+                    const N = plotStates.length;
+                    for (let i = 0; i < 35; i++) {
+                        const yearBE = CURRENT_BE + i;
+                        let totalCo2 = 0, totalContinuousAge = 0, sumSqMargin = 0;
+                        plotStates.forEach((state, idx) => {
+                            const plotCo2 = carbonCo2(state.continuousAge, carbonResults[idx].trees, carbonResults[idx].spacing);
+                            totalCo2 += plotCo2;
+                            if (i > 0) {
+                                const growth = plotCo2 - initialPlotCarbons[idx];
+                                const factor = 0.05 + 0.002 * i;
+                                const m = Math.max(0, growth * factor);
+                                sumSqMargin += m * m;
+                            }
+                            totalContinuousAge += state.continuousAge;
+                            state.continuousAge++;
+                        });
+                        const avgAge = Math.round(totalContinuousAge / N);
+                        if (avgAge > 35) break;
+                        pts.push({ age: avgAge, yearBE, co2: totalCo2, cycle: Math.floor(avgAge / CUT_AGE), cycleAge: avgAge, errorMargin: Math.sqrt(sumSqMargin) });
+                    }
                 }
             } else if (cr) {
-                pts = buildBarPoints(cr.age, cr.plantYearBE, cr.trees, cr.spacing);
+                const plotIdx = selectedMapPlotIndex as number;
+                const backendProfile = backendResponses?.[plotIdx]?.carbon_profile;
+                pts = backendProfile
+                    ? profileToBarPoints(backendProfile, cr.age)
+                    : buildBarPoints(cr.age, cr.plantYearBE, cr.trees, cr.spacing);
             }
 
             return (
@@ -916,56 +1116,17 @@ export function ParcelResultsPanel({
 
                     {isTotal ? (
                         <>
-                            {/* Total CO₂ */}
-                            <div style={{ background: "#fff", borderRadius: 10, padding: "12px 8px", textAlign: "center", border: "1px solid rgba(0,0,0,0.06)", marginBottom: 10 }}>
-                                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>คาร์บอนรวมปัจจุบัน</div>
-                                <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color: "#0d9488" }}>{summaryTotalCo2.toFixed(1)} tCO₂</div>
+                            {/* Total summary */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 10 }}>
+                                {[
+                                    { label: "คาร์บอนรวมปัจจุบัน", val: `${Math.round(summaryTotalCo2).toLocaleString()} tCO₂`, color: "#0d9488" },
+                                ].map(({ label, val, color }) => (
+                                    <div key={label} style={{ background: "#fff", borderRadius: 10, padding: "12px 8px", textAlign: "center", border: "1px solid rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                                        <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>{label}</div>
+                                        <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color }}>{val}</div>
+                                    </div>
+                                ))}
                             </div>
-
-                            {/* Per-parcel breakdown */}
-                            {carbonResults.length > 0 && (
-                                <div style={{ marginBottom: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.06)", overflow: "hidden", background: "#fff" }}>
-                                    {carbonResults.map((cr, i) => (
-                                        <div
-                                            key={i}
-                                            onClick={() => {
-                                                onMapPlotSelected?.(i);
-                                                if (parcelFeatures[i]) onFlyTo(parcelFeatures[i]);
-                                            }}
-                                            style={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 10,
-                                                padding: "9px 12px",
-                                                borderBottom: i < carbonResults.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none",
-                                                cursor: "pointer",
-                                                transition: "background 0.15s",
-                                            }}
-                                            onMouseEnter={e => (e.currentTarget.style.background = "#f0fdf4")}
-                                            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                                        >
-                                            <div style={{
-                                                width: 26, height: 26, borderRadius: 8,
-                                                background: "linear-gradient(135deg, #34d399, #059669)",
-                                                color: "#fff", fontSize: 12, fontWeight: 800,
-                                                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                                            }}>
-                                                {i + 1}
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: 12, color: "#374151", fontWeight: 600 }}>แปลงที่ {i + 1}</div>
-                                                <div style={{ fontSize: 10, color: "#94a3b8" }}>อายุ {cr.age} ปี · {cr.trees.toLocaleString()} ต้น</div>
-                                            </div>
-                                            <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                                <div style={{ fontSize: 13, fontWeight: 800, color: "#0d9488" }}>{cr.co2Now.toFixed(1)}</div>
-                                                <div style={{ fontSize: 10, color: "#94a3b8" }}>tCO₂e</div>
-                                            </div>
-                                            <i className="bi bi-chevron-right" style={{ fontSize: 11, color: "#cbd5e1" }} />
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
                             <CarbonBarChart pts={pts} isMobile={isMobile} narrowMode={!isMobile} />
                             <div style={{ fontSize: 10, color: "#94a3b8", textAlign: "center", marginTop: 4 }}>
                                 hover บนแท่งเพื่อดูรายละเอียด
@@ -976,7 +1137,7 @@ export function ParcelResultsPanel({
                             {/* Plot info summary */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 10 }}>
                                 {[
-                                    { label: "คาร์บอนปัจจุบัน", val: `${cr.co2Now.toFixed(1)} tCO₂`, color: "#0d9488" },
+                                    { label: "คาร์บอนปัจจุบัน", val: `${Math.round(cr.co2Now).toLocaleString()} tCO₂`, color: "#0d9488" },
                                 ].map(({ label, val, color }) => (
                                     <div key={label} style={{ background: "#fff", borderRadius: 10, padding: "8px 8px", textAlign: "center", border: "1px solid rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                                         <div style={{ fontSize: isMobile ? 16 : 17, fontWeight: 800, color }}>{val}</div>
@@ -994,6 +1155,71 @@ export function ParcelResultsPanel({
                             </div>
                         </>
                     ) : null}
+
+                    {/* Input Details Summary (Collapsible) */}
+                    <div style={{ marginTop: 16, background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                        <div
+                            onClick={() => setShowInputDetails(!showInputDetails)}
+                            style={{
+                                padding: "12px 14px",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                background: showInputDetails ? "rgba(14,165,233,0.04)" : "transparent"
+                            }}
+                        >
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 8 }}>
+                                <i className="bi bi-file-text" style={{ color: "#0ea5e9" }} /> ข้อมูลที่ใช้ประมวลผล
+                            </div>
+                            <i className={`bi bi-chevron-${showInputDetails ? "up" : "down"}`} style={{ fontSize: 12, color: "#64748b" }} />
+                        </div>
+
+                        {showInputDetails && (
+                            <div style={{ padding: "0 14px 14px", fontSize: 12, color: "#475569", borderTop: "1px solid rgba(226,232,240,0.6)" }}>
+                                <div style={{ paddingTop: 10 }}>
+                                    <div><strong>ชื่อโครงการ:</strong> {projectName || "-"}</div>
+                                    <div><strong>พื้นที่รวม:</strong> {totalArea.toFixed(2)} ไร่</div>
+                                    <div style={{ marginTop: 8 }}><strong>รายละเอียดแปลง:</strong></div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                                        {plots.map((p, i) => {
+                                            if (!isTotal && selectedMapPlotIndex !== i) return null;
+                                            const f = plotForms[i];
+                                            const crInfo = carbonResults[i];
+                                            if (!f || !crInfo) return null;
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    onClick={() => {
+                                                        if (parcelFeatures[i]) {
+                                                            onFlyTo(parcelFeatures[i]);
+                                                            onMapPlotSelected?.(i);
+                                                        }
+                                                    }}
+                                                    style={{ padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid rgba(0,0,0,0.05)", cursor: "pointer" }}
+                                                >
+                                                    <div style={{ fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>แปลงที่ {i + 1} ({p.areaRai.toFixed(2)} ไร่)</div>
+                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11, color: "#64748b" }}>
+                                                        <div>• ปีที่ปลูก: พ.ศ. {crInfo.plantYearBE}</div>
+                                                        <div>• พันธุ์ยาง: {crInfo.variety}</div>
+                                                        <div>• จำนวนต้น: {crInfo.trees} ต้น</div>
+                                                        <div>• ระยะปลูก: {crInfo.spacing} ม.</div>
+                                                    </div>
+                                                    {f.luMockData && Object.keys(f.luMockData).length > 0 && (
+                                                        <div style={{ marginTop: 4, fontSize: 11, color: "#10b981", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                                            {Object.entries(f.luMockData).map(([k, v]) => (
+                                                                <span key={k}>{k}: {v.pct}%</span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
                         <button

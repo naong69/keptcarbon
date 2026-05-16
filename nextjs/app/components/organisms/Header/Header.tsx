@@ -224,19 +224,6 @@ export default function Header() {
                             <i className="bi bi-people me-2 fs-5 text-secondary"></i> จัดการผู้ใช้
                           </a>
                         </li>
-                        <li>
-                          <a
-                            href="#"
-                            className="dropdown-item d-flex align-items-center py-2"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setDropdownOpen(false);
-                              router.push("/admin/rubber-age");
-                            }}
-                          >
-                            <i className="bi bi-tree me-2 fs-5 text-secondary"></i> คำนวณอายุยาง
-                          </a>
-                        </li>
                       </>
                     )}
                     <li><hr className="dropdown-divider my-1" /></li>
@@ -329,9 +316,6 @@ export default function Header() {
                   <div className="drawer-nav-category">สำหรับผู้ดูแลระบบ</div>
                   <Link href="/admin/users" className={`drawer-nav-item ${pathname === '/admin/users' ? 'active' : ''}`} onClick={closeNav}>
                     <i className="bi bi-people"></i> จัดการผู้ใช้
-                  </Link>
-                  <Link href="/admin/rubber-age" className={`drawer-nav-item ${pathname === '/admin/rubber-age' ? 'active' : ''}`} onClick={closeNav}>
-                    <i className="bi bi-tree"></i> คำนวณอายุยาง
                   </Link>
                 </>
               )}

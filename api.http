@@ -1,54 +1,522 @@
-@baseUrl = http://localhost:8080
+### ================================================================
+### KeptCarbon API Examples
+### ================================================================
+### Two base URLs:
+###   backendUrl  — FastAPI carbon estimation service (port 8080)
+###   nextUrl     — Next.js frontend API routes      (port 3000)
+###
+### Authentication (Next.js routes):
+###   Most routes require a valid JWT stored in an HttpOnly cookie
+###   named "auth_token". Log in first, then copy the Set-Cookie
+###   header value into the @authCookie variable below.
+### ================================================================
 
-### Health check
-GET {{baseUrl}}/
+@backendUrl = http://localhost:8080
+@nextUrl    = http://localhost:3000
+
+# Paste the cookie value from the login / register response here
+@authCookie = auth_token=<paste-jwt-here>
+
+
+# ================================================================
+# 1. BACKEND — FastAPI (port 8080)
+# ================================================================
+
+### 1.1  Health check
+GET {{backendUrl}}/
 Accept: application/json
 
-### Estimate carbon for one plantation polygon
-POST {{baseUrl}}/api/estimate
+
+# ----------------------------------------------------------------
+# 1.2  POST /api/v1/estimate
+#
+# Estimates yearly carbon stock for one or more rubber plantation
+# polygons. Geometry must be EPSG:4326.
+#
+# Fields:
+#   id               (required) unique frontend identifier
+#   geometry         (required) GeoJSON Polygon or MultiPolygon
+#   year_of_planting (optional) CE year — extracted from raster if null
+#   rubber_clone     (optional) "RRIM 600" | "RRIT 251"
+#   tree_count       (optional) user count — calculated if null
+#   spacing_system   (optional) "2.5x8"|"3x7"|"3x8"|"2.5x7"|"3x6"
+#
+# Response: EstimationResponse[]
+#   polygon_id, status, carbon_profile[]
+# ----------------------------------------------------------------
+
+### 1.2a  Estimate — full user input
+POST {{backendUrl}}/api/v1/estimate
 Content-Type: application/json
-Accept: application/json
 
 [
-	{
-		"id": "EXAMPLE_001",
-		"geometry": {
-			"type": "MultiPolygon",
-			"coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
-		},
-		"year_of_planting": 2010,
-		"rubber_clone": "RRIM 600",
-		"tree_count": 33300,
-		"spacing_system": "2.5x8"
-	}
+  {
+    "id": "PLOT_001_FULL_INPUT",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
+    },
+    "year_of_planting": 2010,
+    "rubber_clone": "RRIM 600",
+    "tree_count": 33300,
+    "spacing_system": "2.5x8"
+  }
 ]
 
-### Estimate carbon for multiple polygons
-POST {{baseUrl}}/api/estimate
+### 1.2b  Estimate — year only, tree_count calculated from area + spacing
+POST {{backendUrl}}/api/v1/estimate
 Content-Type: application/json
-Accept: application/json
 
 [
-	{
-		"id": "TC_003_PERFECT_INPUT",
-		"geometry": {
-			"type": "MultiPolygon",
-			"coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
-		},
-		"year_of_planting": 2010,
-		"spacing_system": "2.5x8",
-		"rubber_clone": "RRIM 600",
-		"tree_count": 33300
-	},
-	{
-		"id": "TC_005_YEAR_NULL_HETEROGENEOUS_TREE_COUNT_NULL",
-		"geometry": {
-			"type": "MultiPolygon",
-			"coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
-		},
-		"year_of_planting": null,
-		"spacing_system": "2.5x8",
-		"rubber_clone": "RRIM 600",
-		"tree_count": null
-	}
+  {
+    "id": "PLOT_002_YEAR_ONLY",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
+    },
+    "year_of_planting": 2015,
+    "rubber_clone": "RRIM 600",
+    "tree_count": null,
+    "spacing_system": "2.5x8"
+  }
 ]
+
+### 1.2c  Estimate — all null, year + count fully derived from raster / area
+POST {{backendUrl}}/api/v1/estimate
+Content-Type: application/json
+
+[
+  {
+    "id": "PLOT_003_NO_INPUT",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
+    },
+    "year_of_planting": null,
+    "rubber_clone": null,
+    "tree_count": null,
+    "spacing_system": null
+  }
+]
+
+### 1.2d  Estimate — RRIT 251 clone, 3x7 spacing
+POST {{backendUrl}}/api/v1/estimate
+Content-Type: application/json
+
+[
+  {
+    "id": "PLOT_004_RRIT251",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
+    },
+    "year_of_planting": 2012,
+    "rubber_clone": "RRIT 251",
+    "tree_count": null,
+    "spacing_system": "3x7"
+  }
+]
+
+### 1.2e  Estimate — multiple polygons in one request
+POST {{backendUrl}}/api/v1/estimate
+Content-Type: application/json
+
+[
+  {
+    "id": "PLOT_005A",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
+    },
+    "year_of_planting": 2010,
+    "rubber_clone": "RRIM 600",
+    "tree_count": 33300,
+    "spacing_system": "2.5x8"
+  },
+  {
+    "id": "PLOT_005B",
+    "geometry": {
+      "type": "MultiPolygon",
+      "coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
+    },
+    "year_of_planting": null,
+    "rubber_clone": "RRIM 600",
+    "tree_count": null,
+    "spacing_system": "2.5x8"
+  }
+]
+
+
+# ----------------------------------------------------------------
+# 1.3  POST /api/v1/plantation-info
+#
+# Spatial pre-check: detects province (P_CODE) and classifies
+# all land use types within the drawn polygon.
+# Run this before /api/v1/estimate to validate the area.
+#
+# Fields:
+#   id           (required) unique identifier
+#   geometry     (required) GeoJSON Polygon or MultiPolygon (EPSG:4326)
+#   project_type (optional) e.g. "replanting" | "existing"
+#
+# Response: PlantationInfoResponse
+#   polygon_id, province_code, geometry, area_m2, status,
+#   lu_polygon[] { lu_class, lu_class_desc_th, lu_class_desc_en,
+#                  geometry, area_m2, area_percent }
+#
+# lu_class values: A302 (rubber), F (forest), U (urban),
+#                  W (water), M (miscellaneous), OTHER
+# ----------------------------------------------------------------
+
+### 1.3a  Plantation info — basic polygon
+POST {{backendUrl}}/api/v1/plantation-info
+Content-Type: application/json
+
+{
+  "id": "INFO_001",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]
+  }
+}
+
+### 1.3b  Plantation info — with project_type
+POST {{backendUrl}}/api/v1/plantation-info
+Content-Type: application/json
+
+{
+  "id": "INFO_002_REPLANTING",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]
+  },
+  "project_type": "replanting"
+}
+
+### 1.3c  Plantation info — MultiPolygon
+POST {{backendUrl}}/api/v1/plantation-info
+Content-Type: application/json
+
+{
+  "id": "INFO_003_MULTIPOLYGON",
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [[[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]]
+  },
+  "project_type": "existing"
+}
+
+### 1.3d  Plantation info — polygon outside supported province (expects E01)
+POST {{backendUrl}}/api/v1/plantation-info
+Content-Type: application/json
+
+{
+  "id": "INFO_004_OUT_OF_BOUNDS",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[100.500, 13.750], [100.510, 13.760], [100.520, 13.745], [100.500, 13.750]]]
+  }
+}
+
+
+# ================================================================
+# 2. NEXT.JS — Auth routes (port 3000)
+# ================================================================
+
+# ----------------------------------------------------------------
+# 2.1  POST /api/auth/register
+#
+# Creates a new local (email+password) account.
+# Sets an HttpOnly JWT cookie on success.
+#
+# Body: { email, password (min 6 chars), fullname, phone? }
+# ----------------------------------------------------------------
+
+### 2.1  Register new user
+POST {{nextUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "demo@keptcarbon.com",
+  "password": "secret123",
+  "fullname": "Demo User",
+  "phone": "0812345678"
+}
+
+
+# ----------------------------------------------------------------
+# 2.2  POST /api/auth/login
+#
+# `login` accepts email OR username.
+# Sets an HttpOnly JWT cookie on success.
+# ----------------------------------------------------------------
+
+### 2.2  Login with email
+POST {{nextUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "login": "demo@keptcarbon.com",
+  "password": "secret123"
+}
+
+### 2.2b  Login with username
+POST {{nextUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "login": "demo_1234",
+  "password": "secret123"
+}
+
+
+# ----------------------------------------------------------------
+# 2.3  GET /api/auth/me
+#
+# Returns the currently authenticated user from the JWT cookie.
+# Requires: Cookie header with auth_token.
+# ----------------------------------------------------------------
+
+### 2.3  Get current user
+GET {{nextUrl}}/api/auth/me
+Cookie: {{authCookie}}
+
+
+# ----------------------------------------------------------------
+# 2.4  POST /api/auth/logout
+#
+# Clears the JWT cookie (sets maxAge=0).
+# ----------------------------------------------------------------
+
+### 2.4  Logout
+POST {{nextUrl}}/api/auth/logout
+Cookie: {{authCookie}}
+
+
+# ----------------------------------------------------------------
+# 2.5  GET /api/auth/line
+#
+# Redirects to LINE OAuth authorization page.
+# Not directly testable here — open in browser:
+#   http://localhost:3000/api/auth/line
+# ----------------------------------------------------------------
+
+
+# ================================================================
+# 3. NEXT.JS — User profile
+# ================================================================
+
+# ----------------------------------------------------------------
+# 3.1  PUT /api/profile/update
+#
+# Updates the authenticated user's fullname and phone.
+# Body: { firstname, lastname, phone? }
+# ----------------------------------------------------------------
+
+### 3.1  Update profile
+PUT {{nextUrl}}/api/profile/update
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{
+  "firstname": "Sakda",
+  "lastname": "Homhuan",
+  "phone": "0899999999"
+}
+
+
+# ================================================================
+# 4. NEXT.JS — Dashboard
+# ================================================================
+
+# ----------------------------------------------------------------
+# 4.1  GET /api/dashboard/stats
+#
+# Returns aggregate stats + chart data for the dashboard:
+#   totalPlots, totalAreaRai, totalCarbon, avgCarbonPerRai,
+#   ageData[], ageBuckets[], mapPlots[], bbox
+# ----------------------------------------------------------------
+
+### 4.1  Dashboard stats
+GET {{nextUrl}}/api/dashboard/stats
+Cookie: {{authCookie}}
+
+
+# ================================================================
+# 5. NEXT.JS — Parcel search
+# ================================================================
+
+# ----------------------------------------------------------------
+# 5.1  POST /api/parcels/search
+#
+# Finds A302 rubber parcels that spatially relate to the drawn
+# polygon. Returns GeoJSON FeatureCollection with geometries
+# clipped to the drawn boundary.
+#
+# Body:
+#   geometry  (required) GeoJSON geometry (EPSG:4326)
+#   relation  "intersects" (default) | "touches" | "contains"
+#
+# Response: FeatureCollection { features[], count, relation, truncated }
+# Max results: 2000
+# ----------------------------------------------------------------
+
+### 5.1a  Search parcels — intersects (default)
+POST {{nextUrl}}/api/parcels/search
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]
+  },
+  "relation": "intersects"
+}
+
+### 5.1b  Search parcels — contains only (parcel fully inside drawn polygon)
+POST {{nextUrl}}/api/parcels/search
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[101.438, 12.807], [101.445, 12.809], [101.447, 12.802], [101.439, 12.800], [101.438, 12.807]]]
+  },
+  "relation": "contains"
+}
+
+
+# ================================================================
+# 7. NEXT.JS — Admin: Users  (role=admin required)
+# ================================================================
+
+# ----------------------------------------------------------------
+# 7.1  GET /api/admin/users
+# Lists all users ordered by created_at DESC.
+# ----------------------------------------------------------------
+
+### 7.1  List all users
+GET {{nextUrl}}/api/admin/users
+Cookie: {{authCookie}}
+
+
+# ----------------------------------------------------------------
+# 7.2  PATCH /api/admin/users
+# Updates role, fullname, or phone for a user.
+# Body: { id (required), role?, fullname?, phone? }
+# ----------------------------------------------------------------
+
+### 7.2a  Promote user to admin
+PATCH {{nextUrl}}/api/admin/users
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{
+  "id": 2,
+  "role": "admin"
+}
+
+### 7.2b  Update user name + phone
+PATCH {{nextUrl}}/api/admin/users
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{
+  "id": 3,
+  "fullname": "New Name",
+  "phone": "0812345678"
+}
+
+
+# ----------------------------------------------------------------
+# 7.3  DELETE /api/admin/users
+# Permanently deletes a user by id.
+# Body: { id (required) }
+# ----------------------------------------------------------------
+
+### 7.3  Delete user
+DELETE {{nextUrl}}/api/admin/users
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{
+  "id": 5
+}
+
+
+# ================================================================
+# 8. NEXT.JS — Admin: Parcels  (role=admin required)
+# ================================================================
+
+# ----------------------------------------------------------------
+# 8.1  GET /api/admin/parcels
+# Lists rubber_plots rows with optional filters.
+# Query params:
+#   province, amphoe_t, tambon   — text substring filters
+#   grow_year_min, grow_year_max — planting year range
+#   limit (max 2000, default 500)
+#   offset (default 0)
+# ----------------------------------------------------------------
+
+### 8.1a  List all parcels (first page)
+GET {{nextUrl}}/api/admin/parcels?limit=50&offset=0
+Cookie: {{authCookie}}
+
+### 8.1b  Filter by province + year range
+GET {{nextUrl}}/api/admin/parcels?province=ระยอง&grow_year_min=2010&grow_year_max=2020&limit=100
+Cookie: {{authCookie}}
+
+### 8.1c  Filter by district (amphoe)
+GET {{nextUrl}}/api/admin/parcels?amphoe_t=บ้านฉาง&limit=50
+Cookie: {{authCookie}}
+
+
+# ----------------------------------------------------------------
+# 8.2  GET /api/admin/parcels/filters
+# Returns distinct dropdown values for filters.
+#   No params       → { provinces: string[] }
+#   ?province=X     → { amphoe_ts: string[] }
+# ----------------------------------------------------------------
+
+### 8.2a  Get all provinces
+GET {{nextUrl}}/api/admin/parcels/filters
+Cookie: {{authCookie}}
+
+### 8.2b  Get districts for Rayong province
+GET {{nextUrl}}/api/admin/parcels/filters?province=ระยอง
+Cookie: {{authCookie}}
+
+
+# ----------------------------------------------------------------
+# 8.3  PATCH /api/admin/rubber-age
+# Bulk-updates rubber_age, gee_plant_year, gee_age, gee_confidence
+# for multiple plots. grow_year is never overwritten.
+# Body: { updates: [{ id, rubber_age, gee_plant_year?, gee_age?, gee_confidence? }] }
+# ----------------------------------------------------------------
+
+### 8.3  Bulk update rubber age
+PATCH {{nextUrl}}/api/admin/rubber-age
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{
+  "updates": [
+    {
+      "id": 101,
+      "rubber_age": 12,
+      "gee_plant_year": 2014,
+      "gee_age": 12,
+      "gee_confidence": 0.87
+    },
+    {
+      "id": 102,
+      "rubber_age": 8,
+      "gee_plant_year": 2018,
+      "gee_age": 8,
+      "gee_confidence": 0.72
+    }
+  ]
+}
+
