@@ -35,15 +35,54 @@ See [api.http](api.http) for runnable request examples.
 | `tree_count` | int | no | User-defined count — calculated from area + spacing if null |
 | `spacing_system` | string | no | `"2.5x8"` (default), `"3x7"`, `"3x8"`, `"2.5x7"`, `"3x6"` |
 
-#### `POST /api/v1/plantation-info` — key fields
+#### `POST /api/v1/estimate` — response
+
+```json
+[
+  {
+    "polygon_id": "string",
+    "status": { "status": "success|error", "status_code": "S01|E01…", "message": "string" },
+    "carbon_profile": [
+      { "year": 2025, "total_carbon_tCO2e": 12.3, "ci_lower_tCO2e": 10.1, "ci_upper_tCO2e": 14.5 }
+    ]
+  }
+]
+```
+
+#### `POST /api/v1/plantation-info` — request fields
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes | Unique identifier |
 | `geometry` | GeoJSON | yes | Polygon or MultiPolygon (EPSG:4326) |
 | `project_type` | string | no | e.g. `"replanting"`, `"existing"` |
+| `output_crs` | string | no | CRS for returned geometry. `"EPSG:4326"` (default) = WGS84, `"EPSG:32647"` = UTM Zone 47N (metres) |
 
-`lu_class` values in response: `A302` rubber, `F` forest, `U` urban, `W` water, `M` miscellaneous, `OTHER`
+#### `POST /api/v1/plantation-info` — response
+
+```json
+{
+  "polygon_id": "string",
+  "province_code": "RAY | null",
+  "geometry": { "type": "Polygon", "coordinates": [[]] },
+  "area_m2": 12345.67,
+  "status": { "status": "success|error", "status_code": "S01|E01…", "message": "string" },
+  "lu_polygon": [
+    {
+      "lu_class": "A302",
+      "lu_class_desc_th": "สวนยางพารา",
+      "lu_class_desc_en": "Rubber Plantation",
+      "geometry": { "type": "Polygon", "coordinates": [[]] },
+      "area_m2": 8000.0,
+      "area_percent": 64.8
+    }
+  ]
+}
+```
+
+`lu_class` values: `A302` rubber, `F` forest, `U` urban/built-up, `W` water body, `M` miscellaneous, `OTHER`
+
+Supported provinces: `RAY` (Rayong)
 
 ---
 
