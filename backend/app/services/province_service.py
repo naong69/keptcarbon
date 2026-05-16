@@ -5,12 +5,19 @@ import geopandas as gpd
 from shapely.geometry import shape
 from fastapi import HTTPException
 from pathlib import Path
+import zipfile
 
 
 class ProvinceService:
     def __init__(self):
         self.file_path = Path("app/data/shp/TH_PROVINCE.gpkg")
         self.target_crs = "EPSG:32647"
+
+        if not self.file_path.exists():
+            zip_path = self.file_path.with_suffix(".gpkg.zip")
+            if zip_path.exists():
+                with zipfile.ZipFile(zip_path, "r") as z:
+                    z.extractall(self.file_path.parent)
 
         if self.file_path.exists():
             try:
